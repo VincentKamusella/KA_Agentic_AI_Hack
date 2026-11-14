@@ -1,6 +1,6 @@
 """Measure discovery recall against a manually curated list of known domains.
 
-python -m backend.benchmark result.json expected.json
+python -m backend.discovery.benchmark result.json expected.json
 expected.json: {"domains": ["supplier.example", ...]}
 This reports recall against the benchmark, never total market coverage.
 """

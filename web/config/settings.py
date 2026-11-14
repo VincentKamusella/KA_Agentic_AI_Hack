@@ -154,7 +154,7 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "loggers": {"backend.gemini": {"handlers": ["console"], "level": "INFO", "propagate": False}},
+    "loggers": {"backend.integrations.gemini": {"handlers": ["console"], "level": "INFO", "propagate": False}},
 }
 
 # Bounded research payloads: 100 suppliers × 20 source passages.

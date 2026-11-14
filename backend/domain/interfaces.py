@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from backend.contracts import (
+from backend.domain.contracts import (
     DiscoveryOptions,
     DiscoveryResult,
     EvaluationResult,
@@ -53,7 +53,7 @@ class SupplierRecommender(Protocol):
 
         Break ties by descending evidence coverage, then ascending supplier ID.
         Include all assessments and partial-failure issues in the response.
-        The Django product layer exposes discovery and evaluation separately,
-        serializing stage results with model_dump(mode="json").
+        The research worker runs the full workflow and saves the serialized
+        result for the client to retrieve.
         """
         ...

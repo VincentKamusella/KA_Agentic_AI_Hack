@@ -1,7 +1,7 @@
 """Validated client requests; evidence is loaded from saved discovery results."""
 from pydantic import Field, model_validator
 
-from backend.contracts import Contract, DiscoveryOptions, Requirements
+from backend.domain.contracts import Contract, DiscoveryOptions, Requirements
 
 
 class StageRequest(Contract):

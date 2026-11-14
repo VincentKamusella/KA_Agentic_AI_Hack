@@ -20,7 +20,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
-from backend.contracts import Evidence, PipelineIssue
+from backend.domain.contracts import Evidence, PipelineIssue
 
 USER_AGENT = 'QuotePilotBot/1.0'
 MAX_BYTES = 4 * 1024 * 1024
@@ -167,7 +167,7 @@ def parse_page(requested, url, body, content_type):
     kind, name, legal_id, links, title = 'page', '', '', [], ''
     if 'application/pdf' in content_type or body.startswith(b'%PDF-'):
         try:
-            process = subprocess.run([sys.executable, '-m', 'backend.pdf_text'], input=body,
+            process = subprocess.run([sys.executable, '-m', 'backend.discovery.pdf'], input=body,
                                      capture_output=True, timeout=15, check=True)
             document = json.loads(process.stdout)
             text, title = document['text'], document['title']

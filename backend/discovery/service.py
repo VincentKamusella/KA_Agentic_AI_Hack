@@ -11,13 +11,13 @@ from urllib.error import HTTPError, URLError
 
 from pydantic import HttpUrl, ValidationError
 
-from backend.contracts import DiscoveryResult, PipelineIssue, SupplierEvidence
-from backend.gemini import GeminiError
+from backend.domain.contracts import DiscoveryResult, PipelineIssue, SupplierEvidence
+from backend.integrations.gemini import GeminiError
 
 
 class GeminiDiscovery:
     def __init__(self, client, store=None, crawler=None, progress=None):
-        from backend.research import ResearchStore
+        from backend.persistence.store import ResearchStore
         self.client = client
         self.store = store or ResearchStore()
         self.crawler = crawler
@@ -39,7 +39,7 @@ class GeminiDiscovery:
                 await asyncio.sleep(min(30, max(0, requested_delay)) + random.uniform(0, 1))
 
     async def search_query(self, spec, requirements, options, known_domains, directory_urls):
-        from backend.contracts import QueryCoverage
+        from backend.domain.contracts import QueryCoverage
         query, country, language, source_type = spec
         metric = QueryCoverage(query=query, country=country, language=language, source_type=source_type)
         prompt = (
@@ -93,7 +93,7 @@ class GeminiDiscovery:
             return metric, [], [], issues
 
     async def discover_suppliers(self, requirements, *, options):
-        from backend.crawling import Crawler, crawl_supplier
+        from backend.discovery.crawler import Crawler, crawl_supplier
         result = DiscoveryResult()
         coverage = result.coverage
         groups = {}
@@ -201,7 +201,7 @@ DIRECTORY_HOSTS = {"alibaba.com", "aliexpress.com", "made-in-china.com", "global
 
 def extract_candidates(response, query):
     """Search text supplies leads only. It never becomes evaluator evidence."""
-    from backend.crawling import CrawlError, canonical_url, hostname
+    from backend.discovery.crawler import CrawlError, canonical_url, hostname
     groups, directories = {}, []
     for step in response.get("steps", []):
         if step.get("type") != "model_output":

@@ -9,11 +9,12 @@ from django.conf import settings
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
-from backend.jobs import execute_job, start_job
+from backend.research.jobs import execute_job, start_job
 from backend.models import ResearchJob
-from backend.research import LeaseLost, ResearchStore
-from backend.requests import StageRequest
-from backend.test_support import DemoDiscovery, DemoEvaluator, demo_fixture
+from backend.persistence.store import LeaseLost, ResearchStore
+from backend.research.requests import StageRequest
+from backend.tests.base import StoreCase
+from backend.tests.support import DemoDiscovery, DemoEvaluator, demo_fixture
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
@@ -26,7 +27,7 @@ class QueueTests(TransactionTestCase):
         ResearchJob.objects.filter(pk=claim['id']).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
 
     def test_enqueue_without_provider_or_worker_and_recover_after_crash(self):
-        with patch('backend.gemini.GeminiClient', side_effect=AssertionError('API must not call Gemini')):
+        with patch('backend.integrations.gemini.GeminiClient', side_effect=AssertionError('API must not call Gemini')):
             response = self.client.post('/api/research/', json.dumps(demo_fixture()['request']), content_type='application/json')
         self.assertEqual(response.status_code, 202)
         token = response.json()['job_id']
@@ -51,7 +52,7 @@ class QueueTests(TransactionTestCase):
                 return self.store.create({})
             except RuntimeError:
                 return None
-        with patch('backend.research.MAX_PENDING', 2), ThreadPoolExecutor(max_workers=6) as pool:
+        with patch('backend.persistence.store.MAX_PENDING', 2), ThreadPoolExecutor(max_workers=6) as pool:
             tokens = list(pool.map(enqueue, range(6)))
         self.assertEqual(sum(token is not None for token in tokens), 2)
 
@@ -73,12 +74,12 @@ class QueueTests(TransactionTestCase):
         self.assertIsNotNone(self.store.claim())
 
     def test_evaluation_uses_saved_evidence(self):
-        with patch('backend.gemini.GeminiClient'), patch('backend.discovery.GeminiDiscovery', return_value=DemoDiscovery()):
+        with patch('backend.integrations.gemini.GeminiClient'), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
             token = start_job(self.store, self.payload, 'discover')
             claim = self.store.claim()
             execute_job(self.store, claim['id'], claim['lease_id'])
         payload = self.payload.model_dump(mode='json') | {'discovery_job_id': token}
-        with patch('backend.evaluation.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.gemini.GeminiClient'):
+        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient'):
             response = self.client.post('/api/research/', json.dumps(payload), content_type='application/json')
             self.assertEqual(response.status_code, 202)
             evaluation_token = response.json()['job_id']
@@ -118,8 +119,8 @@ class QueueTests(TransactionTestCase):
 
     def test_separate_worker_finishes_cached_research_without_web_process(self):
         import asyncio
-        from backend.discovery import GeminiDiscovery, search_plan
-        from backend.contracts import DiscoveryOptions
+        from backend.discovery.service import GeminiDiscovery, search_plan
+        from backend.domain.contracts import DiscoveryOptions
         options = DiscoveryOptions(max_queries=1)
         class EmptySearch:
             async def post(self, *args):
@@ -137,7 +138,7 @@ class QueueTests(TransactionTestCase):
         self.assertTrue(result['result']['coverage']['queries'][0]['cached'])
 
     def test_single_submission_runs_discovery_and_evaluation(self):
-        with patch('backend.gemini.GeminiClient'), patch('backend.discovery.GeminiDiscovery', return_value=DemoDiscovery()), patch('backend.evaluation.GeminiEvaluator', return_value=DemoEvaluator()):
+        with patch('backend.integrations.gemini.GeminiClient'), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()), patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()):
             response = self.client.post('/api/research/', json.dumps(demo_fixture()['request']), content_type='application/json')
             self.assertEqual(response.status_code, 202)
             token = response.json()['job_id']
@@ -151,12 +152,12 @@ class QueueTests(TransactionTestCase):
 
     def test_worker_supervisor_requeues_on_shutdown_and_terminates_child(self):
         import threading
-        from backend.management.commands.research_worker import supervise
+        from backend.research.worker import supervise
         token = self.store.create({})
         claim = self.store.claim()
         stop = threading.Event()
         stop.set()
-        with patch('backend.management.commands.research_worker.subprocess.Popen') as popen, patch('backend.management.commands.research_worker.os.killpg') as kill:
+        with patch('backend.research.worker.subprocess.Popen') as popen, patch('backend.research.worker.os.killpg') as kill:
             popen.return_value.poll.return_value = None
             supervise(self.store, claim, stop)
             kill.assert_called_once()
@@ -165,12 +166,22 @@ class QueueTests(TransactionTestCase):
 
     def test_worker_supervisor_stops_child_after_losing_lease(self):
         import threading
-        from backend.management.commands.research_worker import supervise
+        from backend.research.worker import supervise
         token = self.store.create({})
         claim = self.store.claim()
         self.expire(claim)
-        with patch('backend.management.commands.research_worker.subprocess.Popen') as popen, patch('backend.management.commands.research_worker.os.killpg') as kill, patch('backend.management.commands.research_worker.HEARTBEAT_SECONDS', 0):
+        with patch('backend.research.worker.subprocess.Popen') as popen, patch('backend.research.worker.os.killpg') as kill, patch('backend.research.worker.HEARTBEAT_SECONDS', 0):
             popen.return_value.poll.return_value = None
             supervise(self.store, claim, threading.Event())
             kill.assert_called_once()
         self.assertIsNotNone(self.store.claim())
+
+
+class ConcurrencyTests(StoreCase):
+    def test_job_capacity_is_enforced_across_simultaneous_connections(self):
+        from concurrent.futures import ThreadPoolExecutor
+        for _ in range(6):
+            self.store.create({})
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            ids = list(pool.map(lambda _: self.store.claim(), range(6)))
+        self.assertEqual(len([job for job in ids if job]), 2)

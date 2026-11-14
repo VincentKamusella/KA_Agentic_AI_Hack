@@ -2,7 +2,7 @@ import json
 from unittest.mock import patch
 from django.test import SimpleTestCase, Client, override_settings
 
-from backend.test_support import demo_fixture
+from backend.tests.support import demo_fixture
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
@@ -48,7 +48,7 @@ class ResearchApiTests(SimpleTestCase):
     def test_background_discovery_accepts_larger_budgets(self):
         payload = demo_fixture()['request']
         payload['options'] = {'max_suppliers': 100, 'max_pages_per_supplier': 20, 'max_queries': 24}
-        with patch('backend.jobs.start_job', return_value='a' * 64) as start, patch('backend.research.ResearchStore'):
+        with patch('backend.research.jobs.start_job', return_value='a' * 64) as start, patch('backend.persistence.store.ResearchStore'):
             response = self.client.post('/api/research/', data=json.dumps(payload), content_type='application/json')
         self.assertEqual(response.status_code, 202)
         self.assertEqual(start.call_args.args[1].options.max_suppliers, 100)
@@ -59,7 +59,7 @@ class ResearchApiTests(SimpleTestCase):
             self.assertEqual(client.post(url, data='{}', content_type='application/json').status_code, 403)
 
     def test_status_is_private_and_missing_jobs_return_404(self):
-        with patch('backend.research.ResearchStore') as store:
+        with patch('backend.persistence.store.ResearchStore') as store:
             store.return_value.get.return_value = None
             self.assertEqual(self.client.get('/api/research/unknown/').status_code, 404)
             store.return_value.get.return_value = {'status': 'completed', 'result': {'suppliers': []}}
@@ -68,7 +68,7 @@ class ResearchApiTests(SimpleTestCase):
             self.assertEqual(response['Cache-Control'], 'no-store')
 
     def test_concurrency_capacity_returns_actionable_error(self):
-        with patch('backend.jobs.start_job', side_effect=RuntimeError('Research queue is full. Try again later.')):
+        with patch('backend.research.jobs.start_job', side_effect=RuntimeError('Research queue is full. Try again later.')):
             response = self.client.post('/api/research/', data=json.dumps(demo_fixture()['request']), content_type='application/json')
         self.assertEqual(response.status_code, 429)
 

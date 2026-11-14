@@ -1,6 +1,6 @@
 # Backend
 
-Shared models: [`contracts.py`](contracts.py). Service interfaces: [`interfaces.py`](interfaces.py).
+Shared models: [`contracts.py`](domain/contracts.py). Service interfaces: [`interfaces.py`](domain/interfaces.py).
 
 | Owner | Responsibility |
 | --- | --- |

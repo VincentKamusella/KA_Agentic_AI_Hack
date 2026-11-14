@@ -7,7 +7,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from backend.requests import StageRequest
+from backend.research.requests import StageRequest
 
 
 def request_too_large(request):
@@ -25,8 +25,8 @@ def index(request):
 
 @require_POST
 def start_research(request):
-    from backend.jobs import start_job
-    from backend.research import ResearchStore
+    from backend.research.jobs import start_job
+    from backend.persistence.store import ResearchStore
     if request_too_large(request):
         return JsonResponse({"error": "Request is too large."}, status=413)
     try:
@@ -42,7 +42,7 @@ def start_research(request):
 
 @require_GET
 def research_status(request, job_id):
-    from backend.research import ResearchStore
+    from backend.persistence.store import ResearchStore
     result = ResearchStore().get(job_id)
     response = JsonResponse(result if result else {"error": "Research job not found."}, status=200 if result else 404)
     response["Cache-Control"] = "no-store"

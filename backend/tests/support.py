@@ -1,11 +1,11 @@
 """Synthetic fixtures exclusively for offline tests."""
 import json
 from pathlib import Path
-from backend.contracts import CriterionAssessment, DiscoveryResult, EvaluationResult
-from backend.evaluation import aggregate
+from backend.domain.contracts import CriterionAssessment, DiscoveryResult, EvaluationResult
+from backend.evaluation.service import aggregate
 
 def demo_fixture():
-    return json.loads((Path(__file__).resolve().parents[1] / "fixtures/example_pipeline.json").read_text())
+    return json.loads((Path(__file__).resolve().parents[2] / "fixtures/example_pipeline.json").read_text())
 
 
 class DemoDiscovery:

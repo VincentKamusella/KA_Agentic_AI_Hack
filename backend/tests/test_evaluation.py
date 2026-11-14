@@ -2,12 +2,12 @@ import asyncio
 import copy
 import unittest
 
-from backend.contracts import Requirements, SupplierEvidence
-from backend.discovery import extract_candidates
-from backend.evaluation import GeminiEvaluator
-from backend.gemini import GeminiError
-from backend.pipeline import Recommender
-from backend.test_support import DemoDiscovery, DemoEvaluator, demo_fixture
+from backend.domain.contracts import Requirements, SupplierEvidence
+from backend.discovery.service import extract_candidates
+from backend.evaluation.service import GeminiEvaluator
+from backend.integrations.gemini import GeminiError
+from backend.research.pipeline import Recommender
+from backend.tests.support import DemoDiscovery, DemoEvaluator, demo_fixture
 
 
 class FakeClient:
@@ -88,7 +88,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(self.run_eval(FakeClient()).assessments[0].eligibility, 'eligible')
 
     def test_demo_scenario_recomputes_gates(self):
-        from backend.contracts import RecommendRequest
+        from backend.domain.contracts import RecommendRequest
         request = RecommendRequest.model_validate(demo_fixture()['request'])
         recommender = Recommender(DemoDiscovery(), DemoEvaluator())
         initial = asyncio.run(recommender.recommend(request))
@@ -124,9 +124,9 @@ class CitationRedirectTests(unittest.TestCase):
     def test_google_redirect_is_resolved_without_fetching_destination(self):
         from unittest.mock import patch
         from urllib.error import HTTPError
-        from backend.discovery import resolve_google_citation
+        from backend.discovery.service import resolve_google_citation
         url = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/test"
-        with patch("backend.discovery.build_opener") as factory:
+        with patch("backend.discovery.service.build_opener") as factory:
             factory.return_value.open.side_effect = HTTPError(url, 302, "Found", {"Location": "https://supplier.example/products"}, None)
             self.assertEqual(resolve_google_citation(url), "https://supplier.example/products")
             self.assertEqual(factory.return_value.open.call_count, 1)
@@ -134,8 +134,8 @@ class CitationRedirectTests(unittest.TestCase):
 
     def test_other_hosts_are_never_fetched(self):
         from unittest.mock import patch
-        from backend.discovery import resolve_google_citation
-        with patch("backend.discovery.build_opener") as factory:
+        from backend.discovery.service import resolve_google_citation
+        with patch("backend.discovery.service.build_opener") as factory:
             for url in ["http://127.0.0.1/private", "https://vertexaisearch.cloud.google.com.evil.test/grounding-api-redirect/test"]:
                 self.assertEqual(resolve_google_citation(url), url)
             factory.assert_not_called()

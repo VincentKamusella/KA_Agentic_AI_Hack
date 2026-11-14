@@ -2,9 +2,9 @@
 import asyncio
 import logging
 
-from backend.contracts import DiscoveryResult, EvaluationResult, SupplierEvidence
-from backend.research import LeaseLost
-from backend.requests import StageRequest
+from backend.domain.contracts import DiscoveryResult, EvaluationResult, SupplierEvidence
+from backend.persistence.store import LeaseLost
+from backend.research.requests import StageRequest
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,10 @@ def start_job(store, payload, stage='research'):
 
 def execute_job(store, job_id, lease_id):
     # Provider and crawler imports stay outside the HTTP request path.
-    from backend.discovery import GeminiDiscovery
-    from backend.evaluation import GeminiEvaluator
-    from backend.gemini import GeminiClient, GeminiError
-    from backend.pipeline import shortlist
+    from backend.discovery.service import GeminiDiscovery
+    from backend.evaluation.service import GeminiEvaluator
+    from backend.integrations.gemini import GeminiClient, GeminiError
+    from backend.research.pipeline import shortlist
 
     async def checkpoint(result, phase):
         data = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result

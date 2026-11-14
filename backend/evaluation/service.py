@@ -10,9 +10,9 @@ from typing import Literal
 
 from pydantic import Field, ValidationError
 
-from backend.contracts import (Contract, CriterionAssessment, EvaluationResult,
+from backend.domain.contracts import (Contract, CriterionAssessment, EvaluationResult,
                                PipelineIssue, SupplierAssessment)
-from backend.gemini import GeminiError
+from backend.integrations.gemini import GeminiError
 
 CONFIDENCE_THRESHOLD = 0.85  # Provisional hackathon threshold; not calibrated on customers.
 
