@@ -2287,3 +2287,7 @@ h2 {
     row-gap: 0;
   }
 }
+#view-brief {
+  max-width: 860px;
+  margin-inline: auto;
+}
