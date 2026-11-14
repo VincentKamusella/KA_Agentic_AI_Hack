@@ -2173,3 +2173,13 @@ h2 {
     padding: 24px 0 0;
   }
 }
+
+.contact-heading {
+  display: block;
+}
+.contact-heading .contact-status {
+  margin: 8px 0 0;
+  color: var(--qp-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+}

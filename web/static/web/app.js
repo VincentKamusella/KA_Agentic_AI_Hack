@@ -1103,12 +1103,12 @@ function renderContactRecommendations() {
         "div",
         { class: "contact-heading" },
         h("h3", { text: `${index + 1}. ${supplier.name}` }),
-        h(
-          "span",
-          { class: `chip chip-${qualified ? "pass" : "unknown"}` },
-          icon(qualified ? "check" : "unknown"),
-          qualified ? "Meets documented requirements" : "Check with supplier",
-        ),
+        h("p", {
+          class: "contact-status",
+          text: qualified
+            ? "Meets documented requirements"
+            : "Requirements not yet verified",
+        }),
       ),
     );
     article.append(
