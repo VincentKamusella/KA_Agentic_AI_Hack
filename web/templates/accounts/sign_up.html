@@ -1,0 +1,15 @@
+{% extends "accounts/form_base.html" %}
+{% block title %}Create account · QuotePilot{% endblock %}
+{% block heading %}Create your account{% endblock %}
+{% block lead %}An email address and a password are all you need.{% endblock %}
+{% block body %}
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="note note-error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% include "accounts/field.html" with field=form.email label="Email address" type="email" autocomplete="email" autofocus=True %}
+  {% include "accounts/field.html" with field=form.password label="Password" type="password" autocomplete="new-password" help="At least 8 characters, not only numbers, and not a commonly used password." %}
+  {% include "accounts/field.html" with field=form.password_again label="Repeat password" type="password" autocomplete="new-password" %}
+  <button type="submit" class="btn btn-primary">Create account</button>
+</form>
+<p class="auth-links"><span>Already have an account? <a href="{% url 'sign-in' %}">Sign in</a></span></p>
+{% endblock %}

@@ -2,6 +2,14 @@
 
 Dark workspace for procurement specialists: a simple purchase brief goes in, one research job runs on the server, and a shortlist with its evidence comes back. Operate mode; code-first app screen. At the user's request it uses a collapsible left sidebar instead of a top bar, and adds status colours to the two-neutrals-plus-accent palette.
 
+## Pages
+
+- **Landing** (`/`, signed out): header with Sign in and Create account, a hero with the product statement beside an example comparison, three steps, four principles, and a closing call to action. The example is built from the workspace's own chips and result cells, uses fictional suppliers, and is labelled "Illustrative example"; never show invented results as real ones. The one decoration is the ring motif from the delivery-radius picker behind the example.
+- **Account pages** (`/signin/`, `/signup/`, `/password/…`): one centred translucent panel with the same fields, buttons, and inline error style as the brief. Sign-in errors never say whether the email or the password was wrong.
+- **Workspace** (`/app/`, signed in only): described below.
+
+Landing and account styles live in `web/static/web/site.css`, on top of the tokens, gradient, and components in `app.css`.
+
 ## Component system
 
 Bootstrap 5.3.9 is the UI foundation. Use its form-control, form-select, input-group, btn, btn-group/btn-check, table, spinner, modal, and accordion components; do not add another component library. Bootstrap owns component behaviour, focus handling, disabled states, and collapse animation. `web/static/web/app.css` owns layout and the CSS-variable theme. `web/static/web/app.js` builds all dynamic markup through the `h()` helper using `textContent`, because supplier excerpts are untrusted text; never use `innerHTML`. Status is rendered with `chip()`, pending/empty/error states with `panel()`.
@@ -21,13 +29,16 @@ No other decorative gradients, fake company data, extra product areas, or invent
 
 ## Layout
 
-A left sidebar holds the navigation. It is a 64px icon rail by default and expands to 244px with labels through the hamburger button; the choice is remembered in the browser. It lists Current research, the future features History, Preferences, and Old suppliers (disabled, tagged "Soon"), and at the bottom Settings (also disabled until it exists). Do not make a placeholder look or behave as if it worked.
+A left sidebar holds the navigation. It is a 64px icon rail by default and expands to 244px with labels through the hamburger button; the choice is remembered in the browser. It lists Current research, History, Preferences, and Old suppliers, and at the bottom Settings (disabled and tagged "Soon" until it exists), the signed-in email, and Sign out. Do not make a placeholder look or behave as if it worked.
 
 There is no top bar and no step indicator; the user removed both. The research page has three views, reached through the actions and links on each view, never through a separate navigation element. Every view has "New search" beside its title. When adding a view, make sure it stays reachable this way. Content is a single column, maximum 1160px.
 
 - **Brief** (`#/brief`): three required inputs (what is needed, quantity with unit, delivery destination) and two optional ones (needed-by date, other requirements). Units are a select with a custom option. There are no research-budget or search-scope controls; the user removed them, so research runs with the backend defaults. The primary action is "Find my shortlist". Do not add budgets, certifications, weights, or a criteria editor to this form: the backend interprets the brief.
 - **Delivery destination**: a button that opens a modal with a satellite map and four scopes in a segmented control: Radius (search or click for the centre, slider for 5–500 km, drawn as a circle), Countries (click or search to toggle, shown as removable chips), Continents (toggle buttons or map click), and Worldwide. Selected countries are filled with the accent colour. The choice is sent as text and the backend accepts 100 characters, so the dialog blocks longer selections.
 - **Shortlist** (`#/results`): progress while the job runs, then the summary, "Your requirements" grouped into Must have and Nice to have, the comparison matrix, assessment details, research notes, and research coverage. Requirement numbers are the same in the list, the matrix columns, and the details. "Adjust requirements" turns the list into an editor (wording, must-have or nice-to-have, add, remove; never weights) and "Update shortlist" re-checks the saved evidence.
+- **History** (`#/history`): this account's searches, newest first; opening one loads it into the workspace.
+- **Old suppliers** (`#/suppliers`): every supplier found by this account's searches, with how often it appeared and its latest result. Say that a result belongs to that search's requirements.
+- **Preferences** (`#/preferences`): defaults for the quantity unit, delivery destination (same map dialog), and other requirements. They prefill an empty brief and never overwrite one that is filled in or restored.
 - **Sources** (`#/sources`): every researched supplier with its retrieved passages, and candidates that were found but not researched.
 
 Below 720px the sidebar becomes a row with the hamburger and brand whose menu opens in place and closes after navigating, controls stack, the map dialog is full screen, and the matrix scrolls horizontally with the supplier column pinned. Check changes at 1440px and 390px with real comparison data and expanded details.

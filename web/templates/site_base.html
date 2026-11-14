@@ -1,0 +1,25 @@
+{% load static %}<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>{% block title %}QuotePilot{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28' fill='none' stroke='%239cb1de' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5h18v14H13l-6 5v-5H5z'/%3E%3Cpath d='m10 11.5 3 3 6-6'/%3E%3C/svg%3E">
+<link rel="preload" href="{% static 'vendor/ibm-plex-sans/ibm-plex-sans-latin-400-normal.woff2' %}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+<link rel="stylesheet" href="{% static 'web/app.css' %}">
+<link rel="stylesheet" href="{% static 'web/site.css' %}">
+</head>
+<body class="site">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header">
+  <a class="site-brand" href="{% url 'landing' %}">
+    <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 5h18v14H13l-6 5v-5H5z"/><path d="m10 11.5 3 3 6-6"/></svg>
+    <span>QuotePilot</span>
+  </a>
+  <nav aria-label="Account">{% block nav %}<a class="btn btn-outline-secondary btn-sm" href="{% url 'sign-in' %}">Sign in</a>{% endblock %}</nav>
+</header>
+<main id="content">{% block content %}{% endblock %}</main>
+</body>
+</html>

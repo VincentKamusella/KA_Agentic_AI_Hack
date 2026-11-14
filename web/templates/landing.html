@@ -1,0 +1,89 @@
+{% extends "site_base.html" %}
+{% block title %}QuotePilot · Supplier shortlists with the evidence attached{% endblock %}
+{% block nav %}<a class="site-link" href="{% url 'sign-in' %}">Sign in</a><a class="btn btn-primary btn-sm" href="{% url 'sign-up' %}">Create account</a>{% endblock %}
+{% block content %}
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <symbol id="l-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="l-cross" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="l-unknown" viewBox="0 0 24 24"><path d="M9 9.2a3 3 0 1 1 4.6 2.5c-.9.6-1.6 1.2-1.6 2.3"/><path d="M12 17.6v.1"/></symbol>
+</svg>
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <h1 id="hero-title">A supplier shortlist with the evidence attached.</h1>
+    <p>Describe what you need to buy. QuotePilot searches public supplier websites, checks what their pages say against your requirements, and shows you who qualifies and why.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="{% url 'sign-up' %}">Create account</a>
+      <a class="btn btn-outline-secondary" href="{% url 'sign-in' %}">Sign in</a>
+    </div>
+  </div>
+
+  <figure class="hero-figure">
+    <!-- Decoration: the delivery-radius circles from the map picker. -->
+    <svg class="hero-rings" viewBox="0 0 600 600" aria-hidden="true">
+      <circle cx="300" cy="300" r="110"/><circle cx="300" cy="300" r="190"/><circle cx="300" cy="300" r="270"/>
+      <path d="M300 30v540M30 300h540"/>
+      <circle class="hero-dot" cx="300" cy="300" r="5"/>
+    </svg>
+    <div class="example" role="img" aria-label="Illustrative example of a QuotePilot comparison: three fictional suppliers rated pass, fail or unknown against four requirements. Supplier A is eligible and ranked first, Supplier B needs verification, Supplier C is not eligible.">
+      <div class="example-head"><span>Comparison</span><span class="example-tag">Illustrative example</span></div>
+      <ol class="example-reqs" aria-hidden="true">
+        <li><span>1</span>Food-grade aluminium containers, 750 ml</li>
+        <li><span>2</span>Can fulfil an order of 5,000 pieces</li>
+        <li><span>3</span>Can deliver to Germany</li>
+        <li><span>4</span>Recyclable packaging <em>nice to have</em></li>
+      </ol>
+      <table class="example-table" aria-hidden="true">
+        <thead><tr><th></th><th>Supplier</th><th>Eligibility</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead>
+        <tbody>
+          <tr><td><span class="rank-n">1</span></td><th>Supplier A</th><td><span class="chip chip-pass"><svg class="icon"><use href="#l-check"/></svg>Eligible</span></td>
+            <td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td></tr>
+          <tr><td></td><th>Supplier B</th><td><span class="chip chip-unknown"><svg class="icon"><use href="#l-unknown"/></svg>Needs verification</span></td>
+            <td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-unknown"><svg class="icon"><use href="#l-unknown"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-unknown"><svg class="icon"><use href="#l-unknown"/></svg></span></td></tr>
+          <tr><td></td><th>Supplier C</th><td><span class="chip chip-fail"><svg class="icon"><use href="#l-cross"/></svg>Not eligible</span></td>
+            <td><span class="cell cell-fail"><svg class="icon"><use href="#l-cross"/></svg></span></td><td><span class="cell cell-unknown"><svg class="icon"><use href="#l-unknown"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td></tr>
+        </tbody>
+      </table>
+      <p class="example-quote" aria-hidden="true"><span>Source passage behind a result</span>“We produce food-grade aluminium containers from 250 ml to 1 l …”</p>
+    </div>
+  </figure>
+</section>
+
+<section class="steps-section" aria-labelledby="steps-title">
+  <h2 id="steps-title">From a sentence to a shortlist</h2>
+  <ol class="how">
+    <li>
+      <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="9" width="32" height="30" rx="4"/><path d="M15 18h18M15 24h18M15 30h10"/></svg>
+      <h3>Describe the purchase</h3>
+      <p>What you need, how much, where it is delivered and, if you like, by when. Add anything else in your own words; it is sorted into must-haves and nice-to-haves that you can review.</p>
+    </li>
+    <li>
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="21" cy="21" r="11"/><path d="m29.5 29.5 9 9"/><path d="M16 21h10M21 16v10"/></svg>
+      <h3>Research runs for you</h3>
+      <p>Several searches look for suppliers, and passages are retrieved from their pages. Each passage is checked against each requirement: pass, fail, or unknown when the page does not say.</p>
+    </li>
+    <li>
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 12h30M9 24h30M9 36h30"/><path d="m12 9 3 3 5-5M12 21l3 3 5-5"/><path d="M12 33l6 6M18 33l-6 6"/></svg>
+      <h3>Decide with the sources open</h3>
+      <p>Suppliers that meet every must-have are ranked by your nice-to-haves, up to three on the shortlist. Every result opens the passage and the page it came from.</p>
+    </li>
+  </ol>
+</section>
+
+<section class="principles" aria-labelledby="principles-title">
+  <h2 id="principles-title">What you can hold it to</h2>
+  <dl>
+    <div><dt>Unknown stays unknown</dt><dd>When a supplier’s pages do not confirm a requirement, it is shown as open and never counted as a pass. You get a draft question to send the supplier yourself.</dd></div>
+    <div><dt>Must-haves are gates</dt><dd>A supplier that contradicts a must-have is not eligible, whatever else it offers. Nice-to-haves only rank suppliers that passed.</dd></div>
+    <div><dt>Every result shows its evidence</dt><dd>Each rating links to the passage and the source page behind it, and says whether a model or a fixed rule produced it.</dd></div>
+    <div><dt>You make the decision</dt><dd>QuotePilot places no orders and sends no messages. It does not guarantee prices, capacity or delivery dates; those are for you to confirm with the supplier.</dd></div>
+  </dl>
+</section>
+
+<section class="closing" aria-labelledby="closing-title">
+  <h2 id="closing-title">Start with one purchase.</h2>
+  <p>Your searches, the suppliers they found and your defaults are kept with your account.</p>
+  <a class="btn btn-primary" href="{% url 'sign-up' %}">Create account</a>
+</section>
+<footer class="site-footer"><span>QuotePilot</span><span>A research shortlist, not a quotation or purchasing approval.</span></footer>
+{% endblock %}

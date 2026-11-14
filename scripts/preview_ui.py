@@ -1,8 +1,13 @@
 """Local UI preview with FICTIONAL data. Development only.
 
 Runs the Django dev server on 127.0.0.1 with the research queue replaced by an
-in-memory imitation, so the interface can be reviewed without a Gemini key, a
-database, or a worker. It is not routed, imported, or started by the deployed
+in-memory imitation, so the interface can be reviewed without a Gemini key,
+PostgreSQL, or a worker. Accounts, history links and preferences are kept in
+preview.sqlite3 in the project folder. Sign in with the test account:
+
+    test@quotepilot.local / quotepilot-test
+
+Password-reset emails are printed in this terminal. It is not routed, imported, or started by the deployed
 application, which always runs real research.
 
     uv run python scripts/preview_ui.py [port]        # http://127.0.0.1:8001/
@@ -16,7 +21,8 @@ fixtures/example_pipeline.json and walks through the real phases
 - Setting a "Needed by" date leaves every supplier needing verification,
   which shows the empty-shortlist state.
 - A product containing "#fail" makes interpretation fail.
-- Jobs are lost when the server restarts.
+- Research jobs are lost when the server restarts; History then shows only
+  searches made since.
 """
 import asyncio
 import copy
@@ -32,10 +38,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.config.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "scripts.preview_settings")
 os.environ.setdefault("DJANGO_DEBUG", "true")
 os.environ.setdefault("DJANGO_SECRET_KEY", "local-development-only-ui-preview")
-# Settings require a PostgreSQL URL; the preview never opens a connection.
+# The base settings require a PostgreSQL URL; preview_settings swaps in SQLite.
 os.environ.setdefault("DATABASE_URL", "postgresql://preview:preview@127.0.0.1:5432/preview")
 
 import django  # noqa: E402
@@ -219,11 +225,12 @@ views_module.GeminiClient = lambda: None
 views_module.GeminiCriteriaSuggester = PreviewSuggester
 store_module.ResearchStore = PreviewStore
 jobs_module.start_job = start_job
-BaseCommand.check_migrations = lambda self: None  # No database in the preview.
 
 if __name__ == "__main__":
     port = sys.argv[1] if len(sys.argv) > 1 else "8001"
-    print("QuotePilot UI preview: FICTIONAL suppliers, no Gemini calls, no database.")
+    call_command("migrate", run_syncdb=True, verbosity=0)
+    call_command("create_test_account")
+    print("QuotePilot UI preview: FICTIONAL suppliers, no Gemini calls.")
     # The autoreloader restarts this script, so the patches above are reapplied
     # and template or static edits show up without a manual restart.
     call_command("runserver", f"127.0.0.1:{port}")
