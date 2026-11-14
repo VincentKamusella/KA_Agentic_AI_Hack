@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "web/templates/index.html"
+        ],
+        "createdAt": "2026-11-14T15:17:32.241Z",
+        "reason": "Agent verified false positive: detector cannot resolve Django static stylesheet tags and assumes all roles are 16px. app.css sets body 15px, h1 28px (24px mobile), and h2 18px; desktop and mobile renders were reviewed."
+      }
+    ]
+  }
+}
