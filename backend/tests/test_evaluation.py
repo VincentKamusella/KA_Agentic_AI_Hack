@@ -171,9 +171,60 @@ class EvaluationTests(unittest.TestCase):
         client = FakeClient()
         self.supplier.fit_result, self.supplier.fit_confidence = 'pass', .99
         self.supplier.price = '$12.50 / unit'
+        self.supplier.discovered_by = ['very long search query string']
+        self.supplier.aliases = ['alias.example']
         self.run_eval(client)
-        self.assertNotIn('fit_', client.calls[0][1]['input'])
-        self.assertNotIn('"price":', client.calls[0][1]['input'])
+        raw_input = client.calls[0][1]['input']
+        self.assertNotIn('fit_', raw_input)
+        self.assertNotIn('"price":', raw_input)
+        self.assertNotIn('discovered_by', raw_input)
+        self.assertNotIn('aliases', raw_input)
+        self.assertNotIn('source_urls', raw_input)
+
+    def test_combined_evaluation_scores_discovery_fit_in_one_call_and_retries_rate_limit(self):
+        import json
+        from unittest.mock import AsyncMock, patch
+
+        class CombinedClient:
+            def __init__(self):
+                self.calls = 0
+
+            async def post(self, endpoint, payload):
+                self.calls += 1
+                if self.calls == 1:
+                    raise GeminiError('Rate limited', status_code=429, retry_after=0.01)
+                answers = {}
+                for key, q in payload['questions'].items():
+                    if q['type'] == 'score':
+                        answers[key] = {
+                            'type': 'score',
+                            'score': 2.7,
+                            'confidence': .9,
+                            'probabilities': {'0': .02, '1': .03, '2': .2, '3': .75},
+                        }
+                    else:
+                        answers[key] = {
+                            'type': 'choice',
+                            'choice': 'pass',
+                            'confidence': .95,
+                            'probabilities': {'pass': .95, 'fail': .025, 'unknown': .025},
+                        }
+                return {'answers': answers}
+
+        client = CombinedClient()
+        with patch('backend.evaluation.service.asyncio.sleep', new_callable=AsyncMock):
+            result = asyncio.run(GeminiEvaluator(client).evaluate_suppliers(
+                self.requirements,
+                [self.supplier],
+                discovery_prompt='Product: Steel bolts | Search focuses: steel bolts manufacturers',
+            ))
+        self.assertEqual(client.calls, 2)  # 1 retry + 1 combined call (not 2 separate passes)
+        self.assertEqual(self.supplier.fit_rank, 1)
+        self.assertEqual(self.supplier.fit_score, 90.0)
+        self.assertEqual(self.supplier.fit_result, 'pass')
+        self.assertEqual(result.assessments[0].eligibility, 'eligible')
+        self.assertIsNotNone(result.metrics.discovery_ranking)
+        self.assertEqual(result.metrics.discovery_ranking.calls, 1)
 
     def test_failed_call_reports_supplier_failure(self):
         events = []
