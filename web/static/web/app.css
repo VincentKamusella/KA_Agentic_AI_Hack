@@ -1768,8 +1768,6 @@ h2 {
   user-select: none;
   filter: blur(7px);
   opacity: 0.65;
-  animation: preview-drift 8s ease-in-out infinite;
-  animation-delay: var(--preview-delay);
 }
 .loading-preview-card {
   position: absolute;
@@ -1784,20 +1782,20 @@ h2 {
   gap: 14px;
   overflow: hidden;
 }
-.loading-preview-card:nth-child(1) {
+.loading-preview-card {
   top: 0;
-  left: 0;
-  transform: rotate(-7deg);
+  left: 4%;
+  animation: preview-shuffle 9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation-delay: calc(var(--preview-delay) + var(--card-delay));
+}
+.loading-preview-card:nth-child(1) {
+  --card-delay: 0ms;
 }
 .loading-preview-card:nth-child(2) {
-  top: 98px;
-  left: 10%;
-  transform: rotate(4deg);
+  --card-delay: -3000ms;
 }
 .loading-preview-card:nth-child(3) {
-  top: 196px;
-  left: 2%;
-  transform: rotate(-3deg);
+  --card-delay: -6000ms;
 }
 .loading-preview-card strong {
   font-size: 1.25rem;
@@ -1825,13 +1823,35 @@ h2 {
 .preview-line-short {
   width: 60%;
 }
-@keyframes preview-drift {
-  0%,
-  100% {
-    transform: translateY(0);
+@keyframes preview-shuffle {
+  0% {
+    transform: translate(8%, -65px) rotate(-8deg) scale(0.92);
+    opacity: 0;
+    z-index: 1;
   }
-  50% {
-    transform: translateY(-14px);
+  12%,
+  28% {
+    transform: translate(0, 10px) rotate(-6deg) scale(0.94);
+    opacity: 0.8;
+    z-index: 1;
+  }
+  40%,
+  60% {
+    transform: translate(8%, 100px) rotate(4deg) scale(0.98);
+    opacity: 1;
+    z-index: 2;
+  }
+  72%,
+  85% {
+    transform: translate(0, 195px) rotate(-3deg) scale(1);
+    opacity: 1;
+    z-index: 3;
+  }
+  97%,
+  100% {
+    transform: translate(45%, 265px) rotate(12deg) scale(1.02);
+    opacity: 0;
+    z-index: 3;
   }
 }
 @media (max-width: 720px) {
@@ -1848,8 +1868,17 @@ h2 {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .loading-preview {
+  .loading-preview-card {
     animation: none;
+  }
+  .loading-preview-card:nth-child(1) {
+    transform: translate(0, 0) rotate(-6deg);
+  }
+  .loading-preview-card:nth-child(2) {
+    transform: translate(8%, 98px) rotate(4deg);
+  }
+  .loading-preview-card:nth-child(3) {
+    transform: translate(0, 196px) rotate(-3deg);
   }
 }
 .editor-actions {

@@ -686,9 +686,6 @@ function renderResultsState() {
       text: crawling
         ? "Gathering the evidence for your shortlist."
         : PHASES[phase][1],
-      actions: suppliersOf().length
-        ? [linkButton("sources", "View suppliers found so far")]
-        : [],
     });
     loading.classList.add("research-loading");
     const candidates = suppliersOf().slice(-3);
@@ -697,7 +694,7 @@ function renderResultsState() {
       "aria-hidden": "true",
       inert: "",
     });
-    previews.style.setProperty("--preview-delay", `-${Date.now() % 8000}ms`);
+    previews.style.setProperty("--preview-delay", `-${Date.now() % 9000}ms`);
     for (let i = 0; i < 3; i++) {
       const supplier = candidates[i];
       previews.append(
