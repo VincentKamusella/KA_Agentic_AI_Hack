@@ -20,7 +20,11 @@
   --bs-body-font-size: 0.8125rem;
   --bs-secondary-color: var(--qp-muted);
   --bs-secondary-bg: var(--qp-raised);
-  --bs-success-bg-subtle: color-mix(in srgb, var(--qp-good) 14%, var(--qp-dark));
+  --bs-success-bg-subtle: color-mix(
+    in srgb,
+    var(--qp-good) 14%,
+    var(--qp-dark)
+  );
   --bs-success-text-emphasis: color-mix(
     in srgb,
     var(--qp-good) 65%,
@@ -31,7 +35,11 @@
     var(--qp-good) 45%,
     var(--qp-dark)
   );
-  --bs-warning-bg-subtle: color-mix(in srgb, var(--qp-warn) 14%, var(--qp-dark));
+  --bs-warning-bg-subtle: color-mix(
+    in srgb,
+    var(--qp-warn) 14%,
+    var(--qp-dark)
+  );
   --bs-warning-text-emphasis: color-mix(
     in srgb,
     var(--qp-warn) 70%,

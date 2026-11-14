@@ -475,7 +475,6 @@ async function post() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/x-ndjson, application/json",
         "X-CSRFToken": csrf || "",
       },
       body: JSON.stringify({
@@ -485,18 +484,12 @@ async function post() {
       }),
       signal: controller.signal,
     });
-    if (
-      !response.ok ||
-      !response.headers.get("Content-Type")?.includes("ndjson")
-    ) {
-      const data = await response.json().catch(() => ({
-        error: "The server returned an unreadable response. Retry the request.",
-      }));
-      if (!response.ok)
-        throw new Error(data.error || "Request failed. Please retry.");
-      return data;
-    }
-    return await readStream(response, onEvent);
+    const data = await response.json().catch(() => ({
+      error: "The server returned an unreadable response. Retry the request.",
+    }));
+    if (!response.ok)
+      throw new Error(data.error || "Request failed. Please retry.");
+    return data;
   } finally {
     clearTimeout(timer);
   }
@@ -697,7 +690,10 @@ function render() {
       if (a) {
         const stats = criteriaBreakdown(a);
         matchCell.append(
-          el("strong", `${stats.passed} / ${stats.total} passed (${stats.passPct}%)`),
+          el(
+            "strong",
+            `${stats.passed} / ${stats.total} passed (${stats.passPct}%)`,
+          ),
           el(
             "small",
             `${stats.passed} pass · ${stats.failed} fail · ${stats.unknown} unknown${hasPreferences ? ` · Pref ${Math.round(a.preference_score)}/100` : ""}`,
@@ -924,7 +920,9 @@ function fitLine(supplier, evaluated = false) {
     line.append(
       el(
         "span",
-        evaluated ? `Discovery #${supplier.fit_rank}` : `Rank #${supplier.fit_rank}`,
+        evaluated
+          ? `Discovery #${supplier.fit_rank}`
+          : `Rank #${supplier.fit_rank}`,
         "rank-pill compact",
       ),
     );
@@ -1114,7 +1112,10 @@ function renderDecisionPerformance(result, supplierList, criteriaList) {
       );
       if (dr.prompt) {
         const promptEl = el("p", undefined, "perf-prompt");
-        promptEl.append(el("span", "Generated discovery prompt: ", "muted"), dr.prompt);
+        promptEl.append(
+          el("span", "Generated discovery prompt: ", "muted"),
+          dr.prompt,
+        );
         item.append(promptEl);
       }
       if (dr.rubric?.length) {
@@ -1715,11 +1716,7 @@ function renderCandidates(list = suppliers, assessments = new Map()) {
           `${stats.passed} / ${stats.total} criteria passed (${stats.passPct}%)`,
           "fit-score",
         ),
-        el(
-          "span",
-          `${stats.failed} fail · ${stats.unknown} unknown`,
-          "muted",
-        ),
+        el("span", `${stats.failed} fail · ${stats.unknown} unknown`, "muted"),
       );
       description.append(evalLine);
     }
