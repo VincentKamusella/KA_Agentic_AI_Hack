@@ -39,7 +39,10 @@ class Deployer:
 
     def states(self):
         request = Request(f'{self.api}/workspaces/{self.workspace}/pipeline/run',
-                          headers={'Authorization': f'Bearer {self.token}'})
+                          headers={'Authorization': f'Bearer {self.token}',
+                                   # The gateway rejects Python's default urllib user agent.
+                                   'User-Agent': 'QuotePilot-Deploy/1.0',
+                                   'Accept': 'application/json'})
         try:
             with build_opener(NoRedirect()).open(request, timeout=20) as response:
                 rows = json.load(response)
@@ -87,6 +90,8 @@ class Deployer:
         self.remote('export PATH="$HOME/.nix-profile/bin:$PATH"; '
                     'if command -v uv >/dev/null 2>&1 && test -f .venv/pyvenv.cfg; then '
                     'uv run --no-sync python -m web.manage shell -c ' + shlex.quote(database_check) + '; fi')
+        # Verify status access and response parsing before causing downtime.
+        self.states()
         self.cli('stop', 'pipeline', 'run')
         self.wait(running=False)
         # Recheck after stopping to detect edits made while the preflight ran.
