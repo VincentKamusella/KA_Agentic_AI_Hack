@@ -1130,6 +1130,14 @@ function renderContactRecommendations() {
       ),
     );
     article.append(
+      sustainabilityLine(supplier, {
+        always: true,
+        showSourceTag: false,
+        className: "contact-sust",
+      }),
+      sustainabilityEvidenceBlock(supplier),
+    );
+    article.append(
       h(
         "ul",
         { class: "contact-reasons" },
@@ -1900,8 +1908,11 @@ function sustainabilityChip(supplier) {
     supplier.sustainability_score != null
       ? ` · ${Math.round(supplier.sustainability_score)}/100`
       : "";
-  const probs = supplier.sustainability_probabilities
-    ? ` · P(bad ${percent(supplier.sustainability_probabilities["0"] ?? 0)}, ok ${percent(supplier.sustainability_probabilities["1"] ?? 0)}, good ${percent(supplier.sustainability_probabilities["2"] ?? 0)})`
+  const sp = supplier.sustainability_probabilities;
+  const probs = sp
+    ? "certifications" in sp
+      ? ""
+      : ` · P(bad ${percent(sp["0"] ?? 0)}, ok ${percent(sp["1"] ?? 0)}, good ${percent(sp["2"] ?? 0)})`
     : "";
   return h(
     "span",
@@ -1915,8 +1926,15 @@ function sustainabilityChip(supplier) {
   );
 }
 
-function sustainabilityLine(supplier) {
-  if (!supplier.sustainability_rating && !supplier.sustainability_note)
+function sustainabilityLine(
+  supplier,
+  { always = false, showSourceTag = true, className = "" } = {},
+) {
+  if (
+    !always &&
+    !supplier.sustainability_rating &&
+    !supplier.sustainability_note
+  )
     return null;
   const conf =
     supplier.sustainability_confidence != null
@@ -1927,11 +1945,13 @@ function sustainabilityLine(supplier) {
       : null;
   return h(
     "div",
-    { class: "sust-line" },
-    sourceTag(
-      "decision",
-      "Sustainability scored by gemini-decision-1 using public internet sources and crawled pages.",
-    ),
+    { class: `sust-line${className ? ` ${className}` : ""}` },
+    showSourceTag
+      ? sourceTag(
+          "decision",
+          "Sustainability scored by gemini-decision-1 using public internet sources and crawled pages.",
+        )
+      : null,
     sustainabilityChip(supplier),
     conf,
     supplier.sustainability_note

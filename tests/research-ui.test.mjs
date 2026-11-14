@@ -1252,7 +1252,7 @@ test("a signed-out answer sends the browser to the sign-in page", async (t) => {
 });
 
 test("sustainability traffic-light ratings, leaf icon, and internet sources are shown", async (t) => {
-  const withSustainability = structuredClone(completedJob);
+  const withSustainability = withRecommendations();
   withSustainability.result.suppliers[0] = {
     ...withSustainability.result.suppliers[0],
     sustainability_rating: "good",
@@ -1287,6 +1287,20 @@ test("sustainability traffic-light ratings, leaf icon, and internet sources are 
   t.after(() => dom.window.close());
   const d = dom.window.document;
   await settle(finished(d));
+  assert.match(text(d, "contact-recommendations"), /Good · 92\/100/);
+  assert.ok(
+    d.querySelector('#contact-recommendations svg use[href="#i-leaf"]'),
+  );
+  assert.ok(
+    d.querySelector(
+      "#contact-recommendations .traffic-dot.is-active[data-light='good']",
+    ),
+  );
+  assert.match(
+    text(d, "contact-recommendations"),
+    /Internet sustainability sources \(1\)/,
+  );
+  d.getElementById("show-full-results")?.click();
   assert.match(text(d, "comparison"), /Good · 92\/100/);
   assert.match(text(d, "comparison"), /Ok · 50\/100/);
   assert.match(text(d, "comparison"), /Bad · 12\/100/);

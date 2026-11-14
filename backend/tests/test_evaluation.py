@@ -392,14 +392,18 @@ class SustainabilityScoringTests(unittest.TestCase):
                     }
                 data = json.loads(payload['input'])
                 sid = data['supplier']['supplier_id']
-                score, conf = {'alpha': (1.85, .93), 'beta': (1.0, .82), 'gamma': (0.2, .91)}[sid]
-                return {'answers': {'sustainability': {
-                    'type': 'score',
-                    'score': score,
-                    'confidence': conf,
-                    'legend': {'0': 'Bad', '1': 'Ok', '2': 'Good'},
-                    'probabilities': {'0': .05, '1': .15, '2': .8} if sid == 'alpha' else {'0': .8, '1': .15, '2': .05},
-                }}}
+                profiles = {
+                    'alpha': {'certifications': 2.8, 'reporting': 2.5, 'circularity': 2.7, 'transparency': 1.9, 'controversy': 0.03},
+                    'beta': {'certifications': 1.5, 'reporting': 1.0, 'circularity': 1.6, 'transparency': 1.0, 'controversy': 0.05},
+                    'gamma': {'certifications': 0.4, 'reporting': 0.2, 'circularity': 0.5, 'transparency': 0.3, 'controversy': 0.88},
+                }[sid]
+                return {'answers': {
+                    'certifications': {'type': 'score', 'score': profiles['certifications'], 'confidence': .9, 'legend': {}, 'probabilities': {}},
+                    'reporting': {'type': 'score', 'score': profiles['reporting'], 'confidence': .85, 'legend': {}, 'probabilities': {}},
+                    'circularity': {'type': 'score', 'score': profiles['circularity'], 'confidence': .88, 'legend': {}, 'probabilities': {}},
+                    'transparency': {'type': 'score', 'score': profiles['transparency'], 'confidence': .91, 'legend': {}, 'probabilities': {}},
+                    'controversy': {'type': 'noul', 'noul': profiles['controversy'], 'confidence': .92},
+                }}
 
         client = Client()
         scored = asyncio.run(score_suppliers_sustainability(client, None, self.suppliers))

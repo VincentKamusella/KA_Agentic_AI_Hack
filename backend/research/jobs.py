@@ -102,11 +102,20 @@ def execute_job(store, job_id, lease_id):
 
         evaluation.metrics = build_decision_metrics([], 0.0, discovery_ranking=discovery_ranking)
         await checkpoint(combined(), 'evaluation')
+        needs_sust = (
+            [
+                s for s in suppliers
+                if s.sustainability_rating is None
+                or not (s.sustainability_probabilities and 'certifications' in s.sustainability_probabilities)
+            ]
+            if hasattr(evaluator, 'rank_by_discovery') and suppliers
+            else []
+        )
         sust_task = (
             asyncio.create_task(score_suppliers_sustainability(
-                client, store, suppliers, refresh=payload.options.refresh
+                client, store, needs_sust, refresh=payload.options.refresh
             ))
-            if not payload.discovery_job_id and hasattr(evaluator, 'rank_by_discovery') and suppliers
+            if needs_sust
             else None
         )
         for start in range(0, len(suppliers), 6):
@@ -139,7 +148,7 @@ def execute_job(store, job_id, lease_id):
             await checkpoint(combined(), 'evaluation')
         if sust_task is not None:
             sust_scored = await sust_task
-            for target, scored in zip(suppliers, sust_scored):
+            for target, scored in zip(needs_sust, sust_scored):
                 target.sustainability_rating = scored.sustainability_rating
                 target.sustainability_score = scored.sustainability_score
                 target.sustainability_confidence = scored.sustainability_confidence
