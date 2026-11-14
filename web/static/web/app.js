@@ -1082,14 +1082,17 @@ function renderContactRecommendations() {
       text: "Suggested contact order. The eligibility grades and shortlist below remain unchanged. Review each draft before copying it into your email; nothing is sent.",
     }),
   );
-  const list = h("ol", { class: "contact-list" });
+  const list = h("div", {
+    class: "contact-list",
+    "aria-label": "Supplier recommendations",
+  });
   report.recommendations.forEach((recommendation, index) => {
     const supplier = suppliersOf().find(
       (s) => s.supplier_id === recommendation.supplier_id,
     );
     if (!supplier) return;
     const evidence = supplier.evidence || [];
-    const article = h("li", { class: "contact-item" });
+    const article = h("article", { class: "contact-item" });
     const qualified =
       recommendation.qualification === "meets_documented_requirements";
     article.append(
@@ -1194,7 +1197,76 @@ function renderContactRecommendations() {
     );
     list.append(article);
   });
-  host.append(list);
+  const cards = [...list.children];
+  if (!cards.length) return;
+  if (host.dataset.deckJob !== state.jobId) {
+    host.dataset.deckJob = state.jobId;
+    host.dataset.deckIndex = "0";
+    host.dataset.deckMode = "stack";
+  }
+  let current = Math.min(Number(host.dataset.deckIndex) || 0, cards.length - 1);
+  const position = h("span", {
+    class: "contact-position",
+    role: "status",
+    "aria-live": "polite",
+  });
+  const previous = h("button", {
+    type: "button",
+    class: "btn btn-outline-secondary",
+    text: "Previous",
+    "aria-label": "Previous recommendation",
+  });
+  const next = h("button", {
+    type: "button",
+    class: "btn btn-outline-secondary",
+    text: "Next",
+    "aria-label": "Next recommendation",
+  });
+  let fullList = host.dataset.deckMode === "list";
+  const toggle = h("button", {
+    type: "button",
+    class: "btn btn-outline-secondary",
+  });
+  const show = () => {
+    cards.forEach((card, index) => {
+      card.hidden = !fullList && index !== current;
+    });
+    host.dataset.deckMode = fullList ? "list" : "stack";
+    list.classList.toggle("has-stack", !fullList && cards.length > 1);
+    list.classList.toggle("is-full-list", fullList);
+    previous.hidden = next.hidden = fullList;
+    toggle.textContent = fullList ? "Back to card stack" : "View full list";
+    host.dataset.deckIndex = String(current);
+    position.textContent = fullList
+      ? `${cards.length} recommendations`
+      : `${current + 1} of ${cards.length} recommendations`;
+    previous.disabled = current === 0;
+    next.disabled = current === cards.length - 1;
+  };
+  previous.addEventListener("click", () => {
+    current--;
+    show();
+  });
+  next.addEventListener("click", () => {
+    current++;
+    show();
+  });
+  toggle.addEventListener("click", () => {
+    fullList = !fullList;
+    show();
+  });
+  show();
+  host.append(
+    h(
+      "div",
+      { class: "contact-deck-controls" },
+      position,
+      previous,
+      next,
+      toggle,
+    ),
+    list,
+  );
 }
 
 function renderSummaryPanel(context) {

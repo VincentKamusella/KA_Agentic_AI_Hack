@@ -962,3 +962,30 @@ test("a failed recommendation retry shows an actionable error and keeps saved re
     false,
   );
 });
+
+test("recommendations switch between a navigable deck and the full list", async (t) => {
+  const dom = setup(server([withRecommendations()]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => Boolean(d.querySelector(".contact-deck-controls")));
+  const visible = () =>
+    [...d.querySelectorAll(".contact-item")].filter((n) => !n.hidden);
+  const next = d.querySelector('[aria-label="Next recommendation"]');
+  const previous = d.querySelector('[aria-label="Previous recommendation"]');
+  const toggle = [...d.querySelectorAll(".contact-deck-controls button")].find(
+    (n) => n.textContent === "View full list",
+  );
+  assert.equal(visible().length, 1);
+  assert.equal(previous.disabled, true);
+  next.click();
+  const selected = visible()[0];
+  assert.equal(next.disabled, true);
+  toggle.click();
+  assert.equal(visible().length, 2);
+  assert.equal(next.hidden, true);
+  assert.equal(toggle.textContent, "Back to card stack");
+  toggle.click();
+  assert.deepEqual(visible(), [selected]);
+  previous.click();
+  assert.equal(previous.disabled, true);
+});

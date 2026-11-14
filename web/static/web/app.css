@@ -1141,19 +1141,42 @@ h2 {
   color: var(--qp-unknown);
   max-width: 72ch;
 }
+.contact-deck-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.contact-position {
+  margin-right: auto;
+  color: var(--qp-muted);
+  font-variant-numeric: tabular-nums;
+}
 .contact-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  list-style: none;
-  padding: 0;
-  margin: 24px 0 0;
+  position: relative;
+  isolation: isolate;
+  margin: 18px 0 28px;
+}
+.contact-list.has-stack::before,
+.contact-list.has-stack::after {
+  content: "";
+  position: absolute;
+  inset: 0 12px -10px;
+  z-index: -1;
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 14px;
+  background: var(--qp-solid);
+}
+.contact-list.has-stack::before {
+  inset: 0 24px -20px;
+  z-index: -2;
 }
 .contact-item {
-  padding: 24px;
-  border: 1px solid var(--qp-line);
+  padding: 28px;
+  border: 1px solid var(--qp-line-strong);
   border-radius: 14px;
-  background: var(--qp-surface);
+  background: var(--qp-solid);
   min-width: 0;
 }
 .contact-recommendations .block-head {
@@ -2014,4 +2037,9 @@ h2 {
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.contact-list.is-full-list {
+  display: grid;
+  gap: 16px;
 }

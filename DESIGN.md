@@ -47,3 +47,5 @@ The submitted form is kept, locked, while a job runs, and kept on every error. V
 "Needs verification" is never presented as a pass. When no supplier is confirmed, the summary still lists the suppliers that need confirmation and which requirements are open. Copy never implies that order capacity or delivery dates are guaranteed, that orders are placed, or that messages are sent. A supplier whose evaluation failed is "Not evaluated", never failed. Source passages are labelled by kind (source passage, PDF source passage, search summary).
 
 Copy states only what the code does.
+
+Supplier recommendations use a deck: one complete card is visible at a time, with layered edges, a position count, and Previous/Next buttons. A View full list / Back to card stack toggle switches layouts without losing the selected card. Contact priority order is preserved; evidence and email drafts stay inside each card.
