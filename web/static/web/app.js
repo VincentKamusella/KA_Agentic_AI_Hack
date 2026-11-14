@@ -1200,14 +1200,10 @@ function renderContactRecommendations() {
     previous.disabled = current === 0;
     next.disabled = current === cards.length - 1;
   };
-  let transitioning = false;
+  let activeTransition = null;
   const turnCard = (direction) => {
-    if (
-      transitioning ||
-      current + direction < 0 ||
-      current + direction >= cards.length
-    )
-      return;
+    if (current + direction < 0 || current + direction >= cards.length) return;
+    activeTransition?.();
     const outgoing = cards[current];
     const reducedMotion = window.matchMedia?.(
       "(prefers-reduced-motion: reduce)",
@@ -1217,8 +1213,6 @@ function renderContactRecommendations() {
     current += direction;
     show();
     if (!ghost) return;
-    transitioning = true;
-    previous.disabled = next.disabled = true;
     ghost.removeAttribute("id");
     ghost
       .querySelectorAll("[id]")
@@ -1252,12 +1246,17 @@ function renderContactRecommendations() {
       ],
       timing,
     );
-    Promise.allSettled([exit.finished, entry.finished]).then(() => {
+    const cleanup = () => {
+      exit.cancel();
+      entry.cancel();
       ghost.remove();
-      list.classList.remove("is-turning");
-      transitioning = false;
-      show();
-    });
+      if (activeTransition === cleanup) {
+        activeTransition = null;
+        list.classList.remove("is-turning");
+      }
+    };
+    activeTransition = cleanup;
+    Promise.allSettled([exit.finished, entry.finished]).then(cleanup);
   };
   previous.addEventListener("click", () => turnCard(-1));
   next.addEventListener("click", () => turnCard(1));

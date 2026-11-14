@@ -994,3 +994,34 @@ test("a stale template without the research-details wrapper can still start a ru
   assert.equal(posts(calls).length, 1);
   assert.equal(d.getElementById("brief-fields").disabled, false);
 });
+
+test("card navigation stays responsive during interrupted animations", async (t) => {
+  const dom = setup(server([withRecommendations()]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => Boolean(d.querySelector(".contact-deck-controls")));
+  const finishes = [];
+  dom.window.Element.prototype.animate = () => {
+    let finish;
+    const finished = new Promise((resolve) => {
+      finish = resolve;
+    });
+    finishes.push(finish);
+    return { finished, cancel: finish };
+  };
+  const next = d.querySelector('[aria-label="Next recommendation"]');
+  const previous = d.querySelector('[aria-label="Previous recommendation"]');
+  next.click();
+  assert.equal(previous.disabled, false);
+  previous.click();
+  assert.equal(next.disabled, false);
+  next.click();
+  assert.equal(d.querySelectorAll(".contact-turn-ghost").length, 1);
+  await Promise.resolve();
+  assert.equal(d.querySelector(".contact-position").textContent, "2 of 2");
+  finishes.forEach((finish) => finish());
+  await settle(() => !d.querySelector(".contact-turn-ghost"));
+  assert.equal(previous.disabled, false);
+  assert.equal(next.disabled, true);
+  assert.equal(d.querySelectorAll(".contact-item:not([hidden])").length, 1);
+});
