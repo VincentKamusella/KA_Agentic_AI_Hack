@@ -2192,3 +2192,27 @@ h2 {
   padding: 6px 12px;
   font-size: 0.875rem;
 }
+
+#view-results .page-head {
+  margin-bottom: 24px;
+  align-items: center;
+}
+#view-results .page-head .btn {
+  order: initial;
+  margin-left: auto;
+}
+#contact-recommendations {
+  margin-top: 0;
+}
+#contact-recommendations .contact-deck-controls {
+  margin-top: 0;
+  gap: 8px;
+}
+#contact-recommendations .contact-list {
+  margin-top: 12px;
+}
+#view-results .page-head {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+}

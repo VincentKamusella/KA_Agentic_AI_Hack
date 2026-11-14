@@ -1020,11 +1020,11 @@ function renderContactRecommendations() {
     (!report && !suppliersOf().length && !issue);
   if (host.hidden) return;
   host.replaceChildren(
-    h(
-      "div",
-      { class: "block-head" },
-      h("h2", { id: "contact-title", text: "Suppliers to contact" }),
-    ),
+    h("h2", {
+      id: "contact-title",
+      class: "visually-hidden",
+      text: "Recommended suppliers",
+    }),
   );
   if (!report) {
     if (state.recommendationError)
@@ -1040,7 +1040,7 @@ function renderContactRecommendations() {
         title: issue
           ? "Recommendations could not be prepared"
           : "No recommendations saved for this run",
-        text: "Your research and grades are available below. Recheck the saved evidence to prepare recommendations and email drafts.",
+        text: "Recheck the saved evidence to prepare supplier recommendations and emails.",
         actions: state.evidenceJobId
           ? [
               actionButton(
@@ -1054,13 +1054,6 @@ function renderContactRecommendations() {
     );
     return;
   }
-  if (report.no_eligible_suppliers && report.recommendations.length)
-    host.append(
-      h("p", {
-        class: "contact-intro",
-        text: "These suppliers still need to confirm your requirements.",
-      }),
-    );
   if (!report.recommendations.length) {
     host.append(
       h("p", {
@@ -1203,7 +1196,7 @@ function renderContactRecommendations() {
     });
     list.classList.toggle("has-stack", cards.length > 1);
     host.dataset.deckIndex = String(current);
-    position.textContent = `${current + 1} of ${cards.length} recommendations`;
+    position.textContent = `${current + 1} of ${cards.length}`;
     previous.disabled = current === 0;
     next.disabled = current === cards.length - 1;
   };
