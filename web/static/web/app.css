@@ -2321,3 +2321,21 @@ h2 {
 .area-button.is-empty span {
   color: inherit;
 }
+.brief-form > fieldset > .action-bar {
+  justify-content: flex-end;
+}
+@media (max-width: 720px) {
+  .brief-form #submit {
+    width: 100%;
+    justify-content: center;
+  }
+}
+.brief-form .input-group > #quantity {
+  border-radius: var(--bs-border-radius) 0 0 var(--bs-border-radius);
+}
+.brief-form .input-group > #unit {
+  border-radius: 0 var(--bs-border-radius) var(--bs-border-radius) 0;
+}
+#unit-reset {
+  border-radius: 0 var(--bs-border-radius) var(--bs-border-radius) 0;
+}
