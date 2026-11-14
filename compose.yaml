@@ -1,0 +1,19 @@
+# Local development only; Codesphere uses a separately provisioned PostgreSQL service.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: quotepilot
+      POSTGRES_USER: quotepilot
+      POSTGRES_PASSWORD: quotepilot
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quotepilot -d quotepilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  postgres_data:
