@@ -551,6 +551,7 @@ function render() {
   for (const node of document.querySelectorAll("[data-busy-lock]"))
     node.disabled = locked;
   $("unit-custom-field").hidden = $("unit").value !== "custom";
+  $("unit").hidden = $("unit").value === "custom";
   renderBriefNote();
   renderSummary();
   renderResultsState();
@@ -2477,7 +2478,7 @@ function placeName(address) {
 
 function setArea(value) {
   area = value;
-  const text = value ? areaLabel(value) : "Choose destination";
+  const text = value ? areaLabel(value) : "Choose on map…";
   $("area-text").textContent = text;
   $("area-open").title = value ? text : "";
   $("area-open").classList.toggle("is-empty", !value);
@@ -2905,6 +2906,12 @@ $("add").addEventListener("click", () => {
 $("unit").addEventListener("change", () => {
   render();
   if ($("unit").value === "custom") $("unit-custom").focus();
+});
+$("unit-reset")?.addEventListener("click", () => {
+  $("unit").value = "pieces";
+  clearFieldError("quantity-error", "unit-custom");
+  render();
+  $("unit").focus();
 });
 // Typing in a field clears the error shown for it.
 for (const [errorId, controlId] of [

@@ -97,16 +97,17 @@
                   <option value="litres">litres</option>
                   <option value="custom">Other unit…</option>
                 </select>
-              </div>
               <div id="unit-custom-field" hidden>
                 <label class="visually-hidden" for="unit-custom">Custom unit</label>
-                <input class="form-control" id="unit-custom" maxlength="40" placeholder="Unit, for example pallets" aria-describedby="quantity-error">
+                <input class="form-control" id="unit-custom" maxlength="40" placeholder="e.g. pallets" aria-describedby="quantity-error">
+                <button type="button" id="unit-reset" class="btn btn-outline-secondary" aria-label="Choose a standard unit" title="Choose a standard unit"><svg class="icon" aria-hidden="true"><use href="#i-cross"/></svg></button>
+              </div>
               </div>
               <p class="field-error" id="quantity-error" hidden></p>
             </div>
             <div class="field">
               <span class="form-label" id="area-label">Deliver to</span>
-              <button type="button" id="area-open" class="form-control area-button" aria-labelledby="area-label area-text" aria-describedby="area-error"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="area-text">Choose destination</span></button>
+              <button type="button" id="area-open" class="btn btn-outline-secondary area-button" aria-haspopup="dialog" aria-controls="area-modal" aria-labelledby="area-label area-text" aria-describedby="area-error"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="area-text">Choose on map…</span></button>
               <p class="field-error" id="area-error" hidden></p>
             </div>
           </div>
