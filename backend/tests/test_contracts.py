@@ -1,18 +1,17 @@
 """Contract checks that require no database or external API access."""
 
-import json
-from pathlib import Path
 from unittest import TestCase
 
 from pydantic import ValidationError
 
-from backend.contracts import CriterionAssessment, RecommendRequest, RecommendResponse
+from backend.tests.support import demo_fixture
+
+from backend.domain.contracts import CriterionAssessment, RecommendRequest, RecommendResponse
 
 
 class ContractTests(TestCase):
     def setUp(self):
-        path = Path(__file__).resolve().parent.parent / "fixtures/example_pipeline.json"
-        self.fixture = json.loads(path.read_text())
+        self.fixture = demo_fixture()
 
     def test_fixture_round_trips_through_json(self):
         for model, key in ((RecommendRequest, "request"), (RecommendResponse, "response")):

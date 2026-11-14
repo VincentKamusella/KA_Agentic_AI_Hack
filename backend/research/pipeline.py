@@ -1,5 +1,5 @@
 """Shared three-stage workflow and deterministic shortlist."""
-from backend.contracts import RecommendRequest, RecommendResponse
+from backend.domain.contracts import RecommendRequest, RecommendResponse
 
 
 def shortlist(suppliers, evaluation, issues=()):

@@ -29,9 +29,18 @@
 <section id="view-discovery" data-view="discovery" aria-labelledby="page-title">
 <form id="requirements" class="search-panel">
 <div class="section-heading"><h2>Describe the supplier you need.</h2><span class="subtle">Discovery brief</span></div>
-<div class="search-input-row"><div class="search-field"><label for="product" class="visually-hidden">What are you sourcing?</label><textarea class="form-control" id="product" required maxlength="1000" rows="2" placeholder="For example: manufacturers of precision steel bolts for industrial equipment"></textarea></div><button id="discover" type="submit" class="btn btn-primary">Discover suppliers <span aria-hidden="true">→</span></button></div>
+<div class="search-input-row"><div class="search-field"><label for="product" class="visually-hidden">What are you sourcing?</label><textarea class="form-control" id="product" required maxlength="1000" rows="2" placeholder="For example: manufacturers of precision steel bolts for industrial equipment"></textarea></div><button id="discover" type="submit" class="btn btn-primary">Find my shortlist <span aria-hidden="true">→</span></button></div>
 <div class="brief-options"><div><label class="form-label" for="quantity">Quantity</label><input class="form-control" id="quantity" type="number" min="1" step="1" placeholder="Quantity" required></div><div><label class="form-label" for="country">Delivery country</label><input class="form-control" id="country" maxlength="100" placeholder="Country" required></div></div>
-<p id="mode-note" class="help">Searches public sources with Gemini. Verify cited summaries on the original pages.</p>
+<details class="mt-3"><summary>Search scope and budgets</summary>
+<div class="row g-3 mt-1">
+<div class="col-sm-4"><label class="form-label" for="supplier-budget">Candidates to research</label><select id="supplier-budget" class="form-select"><option value="30">30 suppliers</option><option value="60">60 suppliers</option><option value="100">100 suppliers</option></select></div>
+<div class="col-sm-4"><label class="form-label" for="query-budget">Search budget</label><select id="query-budget" class="form-select"><option value="8">8 search passes</option><option value="16">16 search passes</option><option value="24">24 search passes</option></select></div>
+<div class="col-sm-4"><label class="form-label" for="page-budget">Pages per supplier</label><select id="page-budget" class="form-select"><option value="5">5 pages</option><option value="10">10 pages</option><option value="20">20 pages</option></select></div>
+<div class="col-sm-6"><label class="form-label" for="search-countries">Supplier regions</label><input id="search-countries" class="form-control" maxlength="800" placeholder="Germany, Poland, worldwide"><p class="help">Comma-separated; defaults to delivery country and worldwide.</p></div>
+<div class="col-sm-6"><label class="form-label" for="search-languages">Search languages</label><input id="search-languages" class="form-control" maxlength="800" value="English, local language"></div>
+<div class="col-12 form-check ms-2"><input id="refresh-sources" class="form-check-input" type="checkbox"><label for="refresh-sources" class="form-check-label">Fetch fresh sources instead of using the 24-hour cache</label></div>
+</div></details>
+<p id="mode-note" class="help">Searches across sources and languages, then retrieves supplier pages. Larger budgets take longer and use more API calls. Research is saved on this server; this browser remembers your latest job. Public search cannot guarantee every supplier.</p>
 </form>
 <ol class="stages" aria-label="Workflow"><li id="stage-discover" aria-current="step"><span>1</span>Discovery</li><li id="stage-eval"><span>2</span>Evaluation</li><li id="stage-shortlist"><span>3</span>Shortlist</li></ol>
 <div class="workspace">
@@ -43,16 +52,17 @@
 <div class="section-heading results-heading"><h2 id="results-title">Supplier workspace</h2><span id="source-label" class="badge bg-secondary-subtle text-secondary-emphasis">Gemini</span></div>
 <div id="workspace-state" class="workspace-state" role="status" aria-live="polite">
 <div id="loading" hidden><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span><span id="loading-message">Request in progress</span> <span id="loading-time" aria-hidden="true"></span></div>
-<h3 id="state-title">Start with your purchase brief</h3><p id="state-description">Describe the product, quantity, and destination. Add the requirements suppliers must meet, then run discovery.</p>
-<button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry discovery</button>
+<h3 id="state-title">Start with your purchase brief</h3><p id="state-description">Describe the product, quantity, and destination. Add the requirements suppliers must meet, then find your shortlist.</p>
+<button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry research</button>
 <a id="view-shortlist-action" class="btn btn-primary btn-sm" href="#/shortlist" hidden>View shortlist</a>
 </div>
 <div class="research-totals" aria-label="Research summary"><div><span>Discovered suppliers</span><strong id="total-suppliers">0</strong></div><div><span>Source excerpts</span><strong id="total-evidence">0</strong></div><div><span>Shortlisted</span><strong id="total-shortlist">0</strong></div></div>
-<div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Evaluate suppliers <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
+<div id="coverage" class="mt-3" aria-live="polite" hidden></div>
+<div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Update shortlist <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
 </section></div></section>
 <section id="view-shortlist" data-view="shortlist" aria-labelledby="page-title" hidden>
 <div class="view-toolbar"><span class="subtle">Mandatory gates first. Preference ranking second.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Edit criteria</a></div>
-<div id="shortlist-empty" class="view-empty"><h2>No evaluation yet.</h2><p>Discover suppliers and evaluate their evidence to build your shortlist.</p><a class="btn btn-primary" href="#/discovery">Go to discovery</a></div>
+<div id="shortlist-empty" class="view-empty"><h2>No evaluation yet.</h2><p>Submit your brief to research suppliers and build your shortlist.</p><a class="btn btn-primary" href="#/discovery">Go to discovery</a></div>
 <div id="recommendation" class="alert alert-success" hidden></div><div id="comparison"></div>
 <div id="shortlist-evidence-link" hidden><a class="btn btn-outline-secondary btn-sm" href="#/evidence">Inspect supporting evidence →</a></div>
 </section>
@@ -63,7 +73,7 @@
 </section>
 <section id="view-method" data-view="method" aria-labelledby="page-title" hidden>
 <div class="method-content">
-<h2>1. Discover cited supplier evidence</h2><p>Gemini searches for potential suppliers. Only text with source citations is retained. These excerpts are AI-generated summaries, not independently verified quotations. Confirm supplier identity and terms on the original pages.</p>
+<h2>1. Discover suppliers and retrieve evidence</h2><p>Multiple searches explore manufacturers, specialists, directories, and distributors across your chosen regions and languages. We retrieve relevant pages and PDFs from candidate sites and retain source passages. Search summaries are used only to find candidates. Blocked or unreadable pages remain research gaps, not supplier failures. Coverage shows the searches performed and why research stopped; it does not establish completeness. Company metadata and observed redirects help identify duplicates, but identity and terms still need human verification.</p>
 <h2>2. Assess every criterion</h2><p>Each source excerpt is assessed as pass, fail, or unknown. Live decisions below the provisional 85% confidence threshold abstain. Conflicting evidence also becomes unknown. The threshold has not been calibrated on customer examples.</p>
 <h2>3. Apply mandatory gates</h2><p>A mandatory failure makes a supplier ineligible. An unknown mandatory criterion requires verification. Preference scores cannot override either outcome. With no mandatory criteria, the shortlist reflects preferences only.</p>
 <h2>4. Rank eligible suppliers</h2><p>Supported preferences earn 100 points; failed or unknown preferences earn zero. Each criterion uses your chosen weight, and all preference weights stay in the denominator. Ties are broken by evidence coverage, then supplier ID. Up to three eligible suppliers are shortlisted.</p>

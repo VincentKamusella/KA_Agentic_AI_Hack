@@ -2,17 +2,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+export PATH="$HOME/.nix-profile/bin:$PATH"
+
 if ! command -v uv >/dev/null 2>&1; then
     nix-env -iA nixpkgs.uv
-    export PATH="$HOME/.nix-profile/bin:$PATH"
 fi
 # Keep downloaded Python and dependency caches on the workspace's persistent disk.
 export UV_PYTHON_INSTALL_DIR="$PWD/.codesphere/python"
 export UV_CACHE_DIR="$PWD/.codesphere/uv-cache"
 uv sync --locked --python 3.12 --no-dev
-.venv/bin/python -m web.manage check
-.venv/bin/python -m web.manage collectstatic --noinput
+uv run --locked --no-dev python -m web.manage check
+uv run --locked --no-dev python -m web.manage collectstatic --noinput
 # Run smoke tests before touching the deployment database.
-.venv/bin/python -m web.manage test web
-.venv/bin/python -m unittest backend.tests backend.test_evaluation
-.venv/bin/python -m web.manage migrate --noinput
+uv run --locked --no-dev python -m web.manage test backend web --noinput
+uv run --locked --no-dev python -m web.manage migrate --noinput

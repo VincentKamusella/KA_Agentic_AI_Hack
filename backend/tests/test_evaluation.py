@@ -2,12 +2,12 @@ import asyncio
 import copy
 import unittest
 
-from backend.contracts import DiscoveryOptions, Requirements, SupplierEvidence
-from backend.discovery import citations_to_suppliers
-from backend.evaluation import GeminiEvaluator
-from backend.gemini import GeminiError
-from backend.pipeline import Recommender
-from backend.test_support import DemoDiscovery, DemoEvaluator, demo_fixture
+from backend.domain.contracts import Requirements, SupplierEvidence
+from backend.discovery.service import extract_candidates
+from backend.evaluation.service import GeminiEvaluator
+from backend.integrations.gemini import GeminiError
+from backend.research.pipeline import Recommender
+from backend.tests.support import DemoDiscovery, DemoEvaluator, demo_fixture
 
 
 class FakeClient:
@@ -88,7 +88,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(self.run_eval(FakeClient()).assessments[0].eligibility, 'eligible')
 
     def test_demo_scenario_recomputes_gates(self):
-        from backend.contracts import RecommendRequest
+        from backend.domain.contracts import RecommendRequest
         request = RecommendRequest.model_validate(demo_fixture()['request'])
         recommender = Recommender(DemoDiscovery(), DemoEvaluator())
         initial = asyncio.run(recommender.recommend(request))
@@ -105,28 +105,28 @@ class EvaluationTests(unittest.TestCase):
         result = self.run_eval(FakeClient({'c2_e0':'unknown'})).assessments[0]
         self.assertEqual(result.preference_score, 25)
 
-    def test_discovery_accepts_only_cited_text_and_deduplicates(self):
+    def test_discovery_accepts_cited_urls_as_leads_only_and_deduplicates(self):
         response = {'steps':[{'type':'model_output','content':[{
             'type':'text','text':'We make bolts. Unsupported claims.',
             'annotations': [dict(type='url_citation',url='https://alpha.example/about',start_index=0,end_index=14)] * 2
         }]}]}
-        result = citations_to_suppliers(response, DiscoveryOptions())
-        self.assertEqual(len(result.suppliers), 1)
-        self.assertEqual(len(result.suppliers[0].evidence), 1)
-        self.assertEqual(result.suppliers[0].evidence[0].excerpt, 'We make bolts.')
+        suppliers, _ = extract_candidates(response, "bolts")
+        self.assertEqual(len(suppliers), 1)
+        self.assertEqual(len(suppliers[0].source_urls), 1)
+        self.assertEqual(suppliers[0].evidence, [])
         broken = copy.deepcopy(response)
         broken['steps'][0]['content'][0]['annotations'][0]['url'] = 'javascript:alert(1)'
         broken['steps'][0]['content'][0]['annotations'].pop()
-        self.assertFalse(citations_to_suppliers(broken, DiscoveryOptions()).suppliers)
+        self.assertFalse(extract_candidates(broken, "bolts")[0])
 
 
 class CitationRedirectTests(unittest.TestCase):
     def test_google_redirect_is_resolved_without_fetching_destination(self):
         from unittest.mock import patch
         from urllib.error import HTTPError
-        from backend.discovery import resolve_google_citation
+        from backend.discovery.service import resolve_google_citation
         url = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/test"
-        with patch("backend.discovery.build_opener") as factory:
+        with patch("backend.discovery.service.build_opener") as factory:
             factory.return_value.open.side_effect = HTTPError(url, 302, "Found", {"Location": "https://supplier.example/products"}, None)
             self.assertEqual(resolve_google_citation(url), "https://supplier.example/products")
             self.assertEqual(factory.return_value.open.call_count, 1)
@@ -134,8 +134,8 @@ class CitationRedirectTests(unittest.TestCase):
 
     def test_other_hosts_are_never_fetched(self):
         from unittest.mock import patch
-        from backend.discovery import resolve_google_citation
-        with patch("backend.discovery.build_opener") as factory:
+        from backend.discovery.service import resolve_google_citation
+        with patch("backend.discovery.service.build_opener") as factory:
             for url in ["http://127.0.0.1/private", "https://vertexaisearch.cloud.google.com.evil.test/grounding-api-redirect/test"]:
                 self.assertEqual(resolve_google_citation(url), url)
             factory.assert_not_called()
