@@ -1169,10 +1169,6 @@ function renderContactRecommendations() {
           href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,
           text: "Open in email app",
         }),
-        h("p", {
-          class: "help",
-          text: "Add the recipient and send from your email app.",
-        }),
       ),
     );
     list.append(article);
