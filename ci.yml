@@ -25,3 +25,17 @@ run:
     steps:
       - name: Run Django with Gunicorn
         command: bash scripts/start.sh
+  worker:
+    replicas: 2
+    network:
+      ports:
+        - port: 3000
+          isPublic: false
+      paths: []
+    volumeMounts:
+      - name: _workspace
+        mountPath: /home/user/app
+        workspacePath: ""
+    steps:
+      - name: Run research worker
+        command: bash scripts/worker.sh

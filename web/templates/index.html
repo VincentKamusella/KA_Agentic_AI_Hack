@@ -29,7 +29,7 @@
 <section id="view-discovery" data-view="discovery" aria-labelledby="page-title">
 <form id="requirements" class="search-panel">
 <div class="section-heading"><h2>Describe the supplier you need.</h2><span class="subtle">Discovery brief</span></div>
-<div class="search-input-row"><div class="search-field"><label for="product" class="visually-hidden">What are you sourcing?</label><textarea class="form-control" id="product" required maxlength="1000" rows="2" placeholder="For example: manufacturers of precision steel bolts for industrial equipment"></textarea></div><button id="discover" type="submit" class="btn btn-primary">Discover suppliers <span aria-hidden="true">→</span></button></div>
+<div class="search-input-row"><div class="search-field"><label for="product" class="visually-hidden">What are you sourcing?</label><textarea class="form-control" id="product" required maxlength="1000" rows="2" placeholder="For example: manufacturers of precision steel bolts for industrial equipment"></textarea></div><button id="discover" type="submit" class="btn btn-primary">Find my shortlist <span aria-hidden="true">→</span></button></div>
 <div class="brief-options"><div><label class="form-label" for="quantity">Quantity</label><input class="form-control" id="quantity" type="number" min="1" step="1" placeholder="Quantity" required></div><div><label class="form-label" for="country">Delivery country</label><input class="form-control" id="country" maxlength="100" placeholder="Country" required></div></div>
 <details class="mt-3"><summary>Search scope and budgets</summary>
 <div class="row g-3 mt-1">
@@ -52,17 +52,17 @@
 <div class="section-heading results-heading"><h2 id="results-title">Supplier workspace</h2><span id="source-label" class="badge bg-secondary-subtle text-secondary-emphasis">Gemini</span></div>
 <div id="workspace-state" class="workspace-state" role="status" aria-live="polite">
 <div id="loading" hidden><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span><span id="loading-message">Request in progress</span> <span id="loading-time" aria-hidden="true"></span></div>
-<h3 id="state-title">Start with your purchase brief</h3><p id="state-description">Describe the product, quantity, and destination. Add the requirements suppliers must meet, then run discovery.</p>
-<button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry discovery</button>
+<h3 id="state-title">Start with your purchase brief</h3><p id="state-description">Describe the product, quantity, and destination. Add the requirements suppliers must meet, then find your shortlist.</p>
+<button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry research</button>
 <a id="view-shortlist-action" class="btn btn-primary btn-sm" href="#/shortlist" hidden>View shortlist</a>
 </div>
 <div class="research-totals" aria-label="Research summary"><div><span>Discovered suppliers</span><strong id="total-suppliers">0</strong></div><div><span>Source excerpts</span><strong id="total-evidence">0</strong></div><div><span>Shortlisted</span><strong id="total-shortlist">0</strong></div></div>
 <div id="coverage" class="mt-3" aria-live="polite" hidden></div>
-<div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Evaluate suppliers <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
+<div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Update shortlist <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
 </section></div></section>
 <section id="view-shortlist" data-view="shortlist" aria-labelledby="page-title" hidden>
 <div class="view-toolbar"><span class="subtle">Mandatory gates first. Preference ranking second.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Edit criteria</a></div>
-<div id="shortlist-empty" class="view-empty"><h2>No evaluation yet.</h2><p>Discover suppliers and evaluate their evidence to build your shortlist.</p><a class="btn btn-primary" href="#/discovery">Go to discovery</a></div>
+<div id="shortlist-empty" class="view-empty"><h2>No evaluation yet.</h2><p>Submit your brief to research suppliers and build your shortlist.</p><a class="btn btn-primary" href="#/discovery">Go to discovery</a></div>
 <div id="recommendation" class="alert alert-success" hidden></div><div id="comparison"></div>
 <div id="shortlist-evidence-link" hidden><a class="btn btn-outline-secondary btn-sm" href="#/evidence">Inspect supporting evidence →</a></div>
 </section>

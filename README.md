@@ -19,7 +19,13 @@ uv run python -m web.manage migrate
 uv run python -m web.manage runserver
 ```
 
-Open http://127.0.0.1:8000/. Enter your purchase brief and criteria, choose **Discover suppliers**, then **Evaluate suppliers**.
+In a second terminal, start the research worker:
+
+```sh
+uv run python -m web.manage research_worker
+```
+
+Open http://127.0.0.1:8000/. Enter your purchase brief and criteria, choose **Find my shortlist**.
 
 ## Development
 

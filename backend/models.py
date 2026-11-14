@@ -12,6 +12,7 @@ def new_access_token():
 
 class ResearchJob(models.Model):
     class Status(models.TextChoices):
+        QUEUED = 'queued'
         RUNNING = 'running'
         COMPLETED = 'completed'
         FAILED = 'failed'
@@ -19,9 +20,12 @@ class ResearchJob(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     access_token = models.CharField(max_length=64, unique=True, default=new_access_token, editable=False)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RUNNING)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    lease_id = models.UUIDField(null=True, editable=False)
+    lease_expires_at = models.DateTimeField(null=True)
     request = models.JSONField()
     result = models.JSONField(null=True, blank=True)
     error = models.TextField(null=True, blank=True)
@@ -29,7 +33,7 @@ class ResearchJob(models.Model):
     class Meta:
         indexes = [models.Index(fields=['status', 'updated_at'], name='research_active_jobs')]
         constraints = [models.CheckConstraint(condition=models.Q(status__in=[
-            'running', 'completed', 'failed', 'interrupted']), name='research_job_valid_status')]
+            'queued', 'running', 'completed', 'failed', 'interrupted']), name='research_job_valid_status')]
 
 
 class ResearchCacheEntry(models.Model):

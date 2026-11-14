@@ -55,6 +55,7 @@ function setup(fetch, saved = null) {
   });
   const { window } = dom;
   window.HTMLElement.prototype.scrollIntoView = () => {};
+  window.scrollTo = () => {};
   window.AbortSignal = AbortSignal;
   window.fetch = fetch;
   window.setInterval = () => 1;
@@ -230,4 +231,77 @@ test("coverage details stay open when polling updates the counts", async (t) => 
   d.querySelector("#coverage details").open = true;
   await settle(() => d.getElementById("loading").hidden);
   assert.equal(d.querySelector("#coverage details").open, true);
+});
+
+test("one submission waits through queueing and returns the finished shortlist", async (t) => {
+  let polls = 0;
+  const calls = [];
+  const finished = {
+    ...result,
+    ...fixture.response,
+    coverage,
+    phase: "complete",
+  };
+  const dom = setup(async (url, init) => {
+    calls.push({ url, init });
+    if (init?.method === "POST")
+      return reply({ job_id: jobId, status: "queued" });
+    polls++;
+    return reply({
+      status: polls === 1 ? "queued" : "completed",
+      result: polls === 1 ? null : finished,
+      request: { ...request, stage: "research" },
+    });
+  });
+  t.after(() => dom.window.close());
+  const realTimeout = dom.window.setTimeout.bind(dom.window);
+  dom.window.setTimeout = (fn, delay, ...args) =>
+    realTimeout(fn, delay === 2000 ? 10 : delay, ...args);
+  const d = dom.window.document;
+  d.getElementById("product").value = "steel bolts";
+  d.getElementById("quantity").value = "100";
+  d.getElementById("country").value = "Germany";
+  d.querySelector("#criteria textarea").value = "ISO 9001";
+  d.getElementById("requirements").dispatchEvent(
+    new dom.window.Event("submit", { cancelable: true }),
+  );
+  await settle(() => d.getElementById("loading").hidden);
+  assert.equal(calls.filter((c) => c.init?.method === "POST").length, 1);
+  assert.equal(calls[0].url, "/api/research/");
+  assert.equal("suppliers" in JSON.parse(calls[0].init.body), false);
+  assert.equal(d.getElementById("recommendation").hidden, false);
+  assert.equal(d.getElementById("error").hidden, true);
+});
+
+test("updating criteria submits a saved job reference without supplier evidence", async (t) => {
+  const calls = [];
+  const finished = {
+    ...result,
+    ...fixture.response,
+    coverage,
+    phase: "complete",
+  };
+  const dom = setup(async (url, init) => {
+    calls.push({ url, init });
+    if (init?.method === "POST")
+      return reply({ job_id: "b".repeat(64), status: "queued" });
+    return reply({
+      status: "completed",
+      result: finished,
+      request: { ...request, stage: "research" },
+    });
+  }, jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => d.getElementById("loading").hidden);
+  d.getElementById("evaluate").click();
+  await settle(
+    () =>
+      calls.some((c) => c.init?.method === "POST") &&
+      d.getElementById("loading").hidden,
+  );
+  const call = calls.find((c) => c.init?.method === "POST");
+  assert.equal(call.url, "/api/research/");
+  assert.equal(JSON.parse(call.init.body).discovery_job_id, jobId);
+  assert.equal("suppliers" in JSON.parse(call.init.body), false);
 });

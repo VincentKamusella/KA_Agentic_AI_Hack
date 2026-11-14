@@ -56,23 +56,26 @@ class ResearchTests(StoreCase):
 
     def test_persistence_and_expiration(self):
         job = self.store.create({'product': 'bolts'})
-        self.store.update(job, result={'suppliers': []})
+        claim = self.store.claim()
+        self.store.update(claim['id'], lease_id=claim['lease_id'], result={'suppliers': []})
         reopened = ResearchStore()
         self.assertEqual(reopened.get(job)['result'], {'suppliers': []})
         self.store.cache('test', {'text': 'source'})
         self.assertEqual(reopened.cached('test'), {'text': 'source'})
         self.assertIsNone(reopened.cached('test', ttl=-1))
-        ResearchJob.objects.filter(access_token=job).update(updated_at=timezone.now() - timedelta(seconds=1801))
-        self.assertEqual(self.store.get(job)['status'], 'interrupted')
+        ResearchJob.objects.filter(access_token=job).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
+        self.store.claim()
+        self.assertEqual(self.store.get(job)['status'], 'running')
         self.assertIsNotNone(self.store.get(job)['result'])
 
     def test_admission_control_and_release(self):
-        first = self.store.create({})
-        self.store.create({})
-        with self.assertRaises(RuntimeError):
+        for _ in range(3):
             self.store.create({})
-        self.store.update(first, status='completed')
-        self.assertTrue(self.store.create({}))
+        first = self.store.claim()
+        self.assertIsNotNone(self.store.claim())
+        self.assertIsNone(self.store.claim())
+        self.store.update(first['id'], lease_id=first['lease_id'], status='completed')
+        self.assertIsNotNone(self.store.claim())
 
 
 class FetchTests(StoreCase):
@@ -265,38 +268,36 @@ class DiscoveryTests(StoreCase):
 
 class JobTests(StoreCase):
     def test_background_job_persists_result(self):
-        from backend.jobs import start_job
+        from backend.jobs import start_job, execute_job
         from backend.test_support import DemoDiscovery, demo_fixture
-        from web.views import StageRequest
+        from backend.requests import StageRequest
         payload = StageRequest.model_validate(demo_fixture()['request'])
-        with patch('backend.jobs.GeminiClient'), patch('backend.jobs.GeminiDiscovery', return_value=DemoDiscovery()):
+        with patch('backend.gemini.GeminiClient'), patch('backend.discovery.GeminiDiscovery', return_value=DemoDiscovery()):
             job = start_job(self.store, payload, 'discover')
-            for _ in range(100):
-                state = self.store.get(job)
-                if state['status'] != 'running':
-                    break
-                time.sleep(.01)
+            self.assertEqual(self.store.get(job)['status'], 'queued')
+            claim = self.store.claim()
+            execute_job(self.store, claim['id'], claim['lease_id'])
+            state = self.store.get(job)
         self.assertEqual(state['status'], 'completed')
         self.assertEqual(len(state['result']['suppliers']), 3)
 
     def test_failure_retains_checkpoint(self):
-        from backend.jobs import start_job
+        from backend.jobs import start_job, execute_job
         from backend.contracts import DiscoveryResult
         from backend.test_support import demo_fixture
-        from web.views import StageRequest
+        from backend.requests import StageRequest
         class Broken:
             def __init__(self, client, store, progress):
                 self.progress = progress
             async def discover_suppliers(self, *args, **kwargs):
                 await self.progress(DiscoveryResult())
                 raise GeminiError('Provider unavailable')
-        with patch('backend.jobs.GeminiClient'), patch('backend.jobs.GeminiDiscovery', Broken):
+        with patch('backend.gemini.GeminiClient'), patch('backend.discovery.GeminiDiscovery', Broken), self.assertLogs('backend.jobs', level='ERROR'):
             job = start_job(self.store, StageRequest.model_validate(demo_fixture()['request']), 'discover')
-            for _ in range(100):
-                state = self.store.get(job)
-                if state['status'] != 'running':
-                    break
-                time.sleep(.01)
+            self.assertEqual(self.store.get(job)['status'], 'queued')
+            claim = self.store.claim()
+            execute_job(self.store, claim['id'], claim['lease_id'])
+            state = self.store.get(job)
         self.assertEqual(state['status'], 'failed')
         self.assertIsNotNone(state['result'])
         self.assertEqual(state['error'], 'Provider unavailable')
@@ -326,13 +327,10 @@ class CitationVolumeTests(unittest.TestCase):
 class ConcurrencyTests(StoreCase):
     def test_job_capacity_is_enforced_across_simultaneous_connections(self):
         from concurrent.futures import ThreadPoolExecutor
-        def create(_):
-            try:
-                return self.store.create({})
-            except RuntimeError:
-                return None
+        for _ in range(6):
+            self.store.create({})
         with ThreadPoolExecutor(max_workers=6) as pool:
-            ids = list(pool.map(create, range(6)))
+            ids = list(pool.map(lambda _: self.store.claim(), range(6)))
         self.assertEqual(len([job for job in ids if job]), 2)
 
 
@@ -398,7 +396,7 @@ class LegacyImportTests(StoreCase):
             call_command('import_research_sqlite', str(path), stdout=io.StringIO())
             self.assertEqual(self.store.get('a' * 64)['status'], 'interrupted')
             self.assertEqual(self.store.cached('page:test'), {'text': 'source'})
-            self.store.update('a' * 64, status='completed', result={'new': True})
+            ResearchJob.objects.filter(access_token='a' * 64).update(status='completed', result={'new': True})
             call_command('import_research_sqlite', str(path), stdout=io.StringIO())
             self.assertEqual(self.store.get('a' * 64)['result'], {'new': True})
             with sqlite3.connect(path) as source:

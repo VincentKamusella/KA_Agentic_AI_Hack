@@ -69,15 +69,15 @@ function setWorkspaceState(name) {
   const states = {
     ready: [
       "Start with your purchase brief",
-      "Describe the product, quantity, and destination. Add the requirements suppliers must meet, then run discovery.",
+      "Describe the product, quantity, and destination. Add the requirements suppliers must meet, then find your shortlist.",
     ],
     searching: [
       "Finding supplier evidence",
-      "Gemini is searching public sources for your brief. Candidates will appear when discovery finishes; they have not been evaluated yet.",
+      "We are finding suppliers, collecting source evidence, and checking your requirements. Your shortlist will appear when research finishes.",
     ],
     candidates: [
-      "Review candidates, then evaluate",
-      "Discovery found potential suppliers. Review their sources or evaluate them against your mandatory requirements and preferences.",
+      "Saved supplier evidence",
+      "Run research to assess these saved candidates against your current requirements.",
     ],
     evaluating: [
       "Checking your requirements",
@@ -114,13 +114,13 @@ function setBusy(value, message = "") {
   $("loading-message").textContent = "Request in progress";
   $("loading-time").textContent = "";
   $("discover").textContent =
-    value && !suppliers.length ? "Searching…" : "Discover suppliers →";
+    value && !suppliers.length ? "Searching…" : "Find my shortlist →";
   $("evaluate").textContent =
     value && suppliers.length
       ? "Evaluating…"
       : evaluation
-        ? "Re-evaluate suppliers"
-        : "Evaluate suppliers →";
+        ? "Update shortlist"
+        : "Update shortlist";
   if (value) {
     $("workspace-state").scrollIntoView({
       block: "nearest",
@@ -185,7 +185,7 @@ function invalidate(discovery = false) {
     step("eval");
     render();
     notice(
-      "Criteria changed. Re-evaluate the same evidence to update the shortlist.",
+      "Criteria changed. Choose Update shortlist to assess the saved evidence.",
     );
   }
   updateTotals();
@@ -254,7 +254,7 @@ function addCriterion(
   $("criteria").append(row);
   $("add").disabled = $("criteria").children.length >= 12;
 }
-async function post(stage) {
+async function post() {
   const csrf = document.cookie
     .split("; ")
     .find((x) => x.startsWith("csrftoken="))
@@ -262,7 +262,7 @@ async function post(stage) {
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 240000);
   try {
-    const response = await fetch(`/api/${stage}/`, {
+    const response = await fetch("/api/research/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -272,7 +272,6 @@ async function post(stage) {
         requirements: readRequirements(),
         options: readOptions(),
         discovery_job_id: discoveryJobId,
-        suppliers: stage === "evaluate-jobs" ? suppliers : [],
       }),
       signal: controller.signal,
     });
@@ -338,8 +337,8 @@ function render() {
     `${suppliers.length} candidate supplier${suppliers.length === 1 ? "" : "s"} · ${suppliers.reduce((n, s) => n + s.evidence.length, 0)} source excerpts`;
   $("evaluate").hidden = !suppliers.length;
   $("evaluate").textContent = evaluation
-    ? "Re-evaluate suppliers"
-    : "Evaluate suppliers →";
+    ? "Update shortlist"
+    : "Update shortlist";
   $("sources").replaceChildren();
   $("comparison").replaceChildren();
   $("recommendation").hidden = !evaluation;
@@ -480,19 +479,20 @@ $("requirements").addEventListener("submit", async (event) => {
   setBusy(true, "Searching supplier sources with Gemini…");
   notice("Searching supplier sources with Gemini…");
   try {
-    const job = await post("research");
+    const job = await post();
     discoveryJobId = job.job_id;
     rememberJob(job.job_id);
     const result = await pollResearch(job.job_id);
     suppliers = result.suppliers;
+    evaluation = result.assessments ? result : null;
     discoveryIssues = result.issues;
     coverage = result.coverage;
     renderCoverage();
     render();
-    step(suppliers.length ? "eval" : "discover");
+    step(evaluation ? "shortlist" : "discover");
     notice(
       suppliers.length
-        ? "Discovery complete. Review the source evidence, then evaluate suppliers."
+        ? "Research complete. Your shortlist and supporting evidence are ready."
         : discoveryIssues.find((issue) => issue.retryable)?.message ||
             "No supplier evidence found. Refine the brief and retry.",
     );
@@ -514,10 +514,13 @@ $("evaluate").addEventListener("click", async () => {
   setWorkspaceState("evaluating");
   setBusy(true, "Evaluating evidence against your criteria…");
   try {
-    const job = await post("evaluate-jobs");
+    const job = await post();
     rememberJob(job.job_id);
     evaluation = await pollResearch(job.job_id);
     suppliers = evaluation.suppliers;
+    coverage = evaluation.coverage;
+    discoveryJobId = job.job_id;
+    renderCoverage();
     render();
     step("shortlist");
     if (currentView() === "discovery") location.hash = "/shortlist";
@@ -736,21 +739,30 @@ async function fetchResearch(id) {
 async function pollResearch(id) {
   for (;;) {
     const job = await fetchResearch(id);
+    if (job.result?.phase === "evaluation") {
+      step("eval");
+      setWorkspaceState("evaluating");
+    }
     if (job.result?.coverage) {
       coverage = job.result.coverage;
       renderCoverage();
       $("loading-message").textContent =
         `${coverage.queries.length} searches · ${coverage.researched} candidates researched`;
-    } else if (job.result?.assessments) {
+    }
+    if (job.result?.assessments) {
       $("loading-message").textContent =
         `${job.result.assessments.length} suppliers assessed`;
     }
     if (job.status === "completed") return job.result;
-    if (job.status !== "running") {
+    if (job.status === "queued") {
+      $("loading-message").textContent =
+        "Queued — waiting for a research worker…";
+    }
+    if (!["queued", "running"].includes(job.status)) {
       if (job.result?.suppliers) {
         suppliers = job.result.suppliers;
         discoveryIssues = job.result.issues || [];
-        if (job.request.stage === "evaluate") evaluation = job.result;
+        if (job.result.assessments) evaluation = job.result;
         render();
       }
       throw new Error(
@@ -795,7 +807,12 @@ async function restoreResearch(id) {
       request.stage === "evaluate" ? request.discovery_job_id : id;
     const result = await pollResearch(id);
     suppliers = result.suppliers;
-    if (request.stage === "evaluate") {
+    if (request.stage === "research") {
+      evaluation = result.assessments ? result : null;
+      discoveryJobId = id;
+      coverage = result.coverage;
+      discoveryIssues = result.issues || [];
+    } else if (request.stage === "evaluate") {
       evaluation = result;
       discoveryJobId = request.discovery_job_id;
       if (discoveryJobId) {

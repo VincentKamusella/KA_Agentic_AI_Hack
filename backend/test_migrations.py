@@ -37,4 +37,28 @@ class UUIDMigrationTests(TransactionTestCase):
                 self.assertEqual(entry.key, f'page:{character}')
                 self.assertEqual(entry.value, {'text': character})
         finally:
-            MigrationExecutor(connection).migrate(after)
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+class QueueMigrationTests(TransactionTestCase):
+    def test_running_jobs_are_queued_without_losing_checkpoints(self):
+        before = [('backend', '0002_uuid_primary_keys')]
+        after = [('backend', '0003_durable_queue')]
+        executor = MigrationExecutor(connection)
+        executor.migrate(before)
+        try:
+            jobs = executor.loader.project_state(before).apps.get_model('backend', 'ResearchJob').objects
+            running = jobs.create(status='running', request={'stage': 'discover'}, result={'suppliers': []})
+            completed = jobs.create(status='completed', request={'stage': 'discover'}, result={'suppliers': []})
+            executor = MigrationExecutor(connection)
+            executor.migrate(after)
+            jobs = executor.loader.project_state(after).apps.get_model('backend', 'ResearchJob').objects
+            recovered = jobs.get(pk=running.id)
+            self.assertEqual(recovered.status, 'queued')
+            self.assertEqual(recovered.result, {'suppliers': []})
+            self.assertEqual(recovered.attempts, 0)
+            self.assertEqual(jobs.get(pk=completed.id).status, 'completed')
+        finally:
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())
