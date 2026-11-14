@@ -2345,15 +2345,6 @@ function go(name) {
 
 function reset() {
   if (state.submitting) return;
-  if (
-    state.jobId &&
-    !window.confirm(
-      busy()
-        ? "Start a new search? The current research keeps running on the server, but this browser will stop following it."
-        : "Start a new search? The current brief and results are cleared from this browser.",
-    )
-  )
-    return;
   state.watch++;
   Object.assign(state, {
     jobId: null,
