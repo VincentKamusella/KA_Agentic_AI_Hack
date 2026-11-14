@@ -109,8 +109,13 @@ function setWorkspaceState(name) {
   $("view-shortlist-action").hidden = name !== "evaluated";
   $("workspace-state").dataset.state = name;
 }
+let loadingTimer;
 function setBusy(value, message = "") {
   busy = value;
+  clearInterval(loadingTimer);
+  $("loading").hidden = !value;
+  $("loading-message").textContent = "Request in progress";
+  $("loading-time").textContent = "";
   $("discover").textContent =
     value && !suppliers.length ? "Searching…" : "Find my shortlist →";
   $("evaluate").textContent =
@@ -124,6 +129,11 @@ function setBusy(value, message = "") {
       block: "nearest",
       behavior: "instant",
     });
+    const started = Date.now();
+    loadingTimer = setInterval(() => {
+      $("loading-time").textContent =
+        `${Math.floor((Date.now() - started) / 1000)}s elapsed`;
+    }, 1000);
   }
 
   document
@@ -296,6 +306,9 @@ function renderSuggestions(items) {
     box.disabled = busy;
     box.addEventListener("change", () => {
       if (box.checked) {
+        for (const blank of [...$("criteria").children]) {
+          if (!blank.querySelector("textarea").value.trim()) blank.remove();
+        }
         if ($("criteria").children.length >= 12) {
           box.checked = false;
           error("You can include at most 12 decision criteria.");
@@ -1057,15 +1070,15 @@ function hideTrace() {
 $("requirements").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
+  if (!$("criteria").children.length) {
+    error("Add at least one decision criterion.");
+    return;
+  }
   error();
   invalidate(true);
-  const brief = briefPayload();
-  if (brief.product.length >= 4 && JSON.stringify(brief) !== suggestedBriefKey)
-    fetchSuggestions(brief);
   setWorkspaceState("searching");
   setBusy(true, "Searching supplier sources with Gemini…");
-  startTrace("discover");
-  let ok = false;
+  notice("Searching supplier sources with Gemini…");
   try {
     const job = await post();
     discoveryJobId = job.job_id;
@@ -1093,7 +1106,6 @@ $("requirements").addEventListener("submit", async (event) => {
     setWorkspaceState("discoveryError");
     notice("Discovery did not complete.");
   } finally {
-    finishTrace(ok);
     setBusy(false);
   }
 });
@@ -1107,8 +1119,6 @@ $("evaluate").addEventListener("click", async () => {
   error();
   setWorkspaceState("evaluating");
   setBusy(true, "Evaluating evidence against your criteria…");
-  startTrace("evaluate");
-  let ok = false;
   try {
     const job = await post();
     rememberJob(job.job_id);
@@ -1132,7 +1142,6 @@ $("evaluate").addEventListener("click", async () => {
     setWorkspaceState("evaluationError");
     notice("Evaluation did not complete.");
   } finally {
-    finishTrace(ok);
     setBusy(false);
   }
 });
@@ -1141,6 +1150,18 @@ $("add").addEventListener("click", () => {
     addCriterion();
     invalidate();
     $("criteria").lastChild.querySelector("textarea").focus();
+  }
+});
+$("suggest").addEventListener("click", () => {
+  if (!busy) scheduleSuggestions(true);
+});
+$("select-all-suggestions").addEventListener("click", () => {
+  for (const box of $("suggested-criteria").querySelectorAll(
+    "input[type='checkbox']:not(:checked)",
+  )) {
+    if ($("criteria").children.length >= 12) break;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
   }
 });
 for (const id of [
@@ -1154,7 +1175,10 @@ for (const id of [
   "search-languages",
   "refresh-sources",
 ])
-  $(id).addEventListener("input", () => invalidate(true));
+  $(id).addEventListener("input", () => {
+    invalidate(true);
+    if (["product", "quantity", "country"].includes(id)) scheduleSuggestions();
+  });
 function reset(navigate = true) {
   if (busy) return;
   if (navigate) location.hash = "/discovery";
@@ -1171,7 +1195,7 @@ function reset(navigate = true) {
   $("suggested-status").textContent = "";
   $("suggested-box").hidden = true;
   $("select-all-suggestions").hidden = true;
-  updateCriteriaHint();
+  addCriterion();
   invalidate(true);
   notice("Enter your purchase brief and decision criteria to find suppliers.");
 }

@@ -5,8 +5,8 @@ import re
 
 from pydantic import ValidationError
 
-from backend.contracts import Criterion, SuggestCriteriaRequest, SuggestCriteriaResponse
-from backend.gemini import GeminiError
+from backend.domain.contracts import Criterion, SuggestCriteriaRequest, SuggestCriteriaResponse
+from backend.integrations.gemini import GeminiError
 
 CRITERIA_SCHEMA = {
     "type": "object",

@@ -61,6 +61,20 @@ class SupplierEvidence(Contract):
     legal_id: str | None = None
     identity_status: Literal["unverified", "site_identified"] = "unverified"
     crawl_status: Literal["pending", "complete", "partial", "unavailable"] = "pending"
+    price: str | None = None
+    # Discovery relevance screen by the decision model; None when it did not run.
+    fit_result: Literal["pass", "fail", "unknown"] | None = None
+    fit_confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class EvidenceDecision(Contract):
+    """One raw decision-model answer for one excerpt. `counted` is False when the
+    answer abstained or fell below the confidence threshold."""
+
+    evidence_id: str = Field(min_length=1)
+    choice: Literal["pass", "fail", "unknown"]
+    confidence: float = Field(ge=0, le=1)
+    counted: bool
 
 
 class CriterionAssessment(Contract):

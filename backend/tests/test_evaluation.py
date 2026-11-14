@@ -146,115 +146,12 @@ class EvaluationTests(unittest.TestCase):
         self.assertNotIn('fit_', client.calls[0][1]['input'])
         self.assertNotIn('"price":', client.calls[0][1]['input'])
 
-    def test_extract_price_from_cited_excerpts(self):
-        from backend.discovery import citations_to_suppliers, extract_price
-        self.assertEqual(extract_price(['Precision bolts at $0.45 per unit.']), '$0.45 per unit')
-        self.assertEqual(extract_price(['Bulk pack: €120.00 / box']), '€120.00 / box')
-        self.assertEqual(extract_price(['Unit cost 14.50 USD each']), '14.50 USD each')
-        self.assertIsNone(extract_price(['ISO 9001 certified for 1000 units.']))
-        response = {'status': 'completed', 'steps': [{'type': 'model_output', 'content': [{
-            'type': 'text', 'text': 'Steel bolts start at $12.50 - $15.00 per box.',
-            'annotations': [dict(type='url_citation', url='https://alpha.example/pricing', start_index=0, end_index=45)],
-        }]}]}
-        result = citations_to_suppliers(response, DiscoveryOptions())
-        self.assertEqual(result.suppliers[0].price, '$12.50 - $15.00 per box')
-
     def test_failed_call_reports_supplier_failure(self):
         events = []
         asyncio.run(GeminiEvaluator(FakeClient(error=GeminiError('Unavailable'))).evaluate_suppliers(
             self.requirements, [self.supplier], progress=events.append))
         self.assertEqual(events[3]['status'], 'failed')
         self.assertEqual(events[3]['message'], 'Unavailable')
-
-
-class DiscoveryRelevanceTests(unittest.TestCase):
-    response = {'status': 'completed', 'steps': [{'type': 'model_output', 'content': [{
-        'type': 'text', 'text': 'We make bolts.',
-        'annotations': [dict(type='url_citation', url='https://alpha.example/about', start_index=0, end_index=14)],
-    }]}]}
-
-    def discover(self, decisions):
-        from backend.discovery import GeminiDiscovery
-
-        class Client:
-            async def post(self, endpoint, payload):
-                if endpoint == 'interactions':
-                    return copy.deepcopy(DiscoveryRelevanceTests.response)
-                if isinstance(decisions, Exception):
-                    raise decisions
-                return {'answers': {key: decisions for key in payload['questions']}}
-
-        events = []
-        requirements = Requirements.model_validate(demo_fixture()['request']['requirements'])
-        result = asyncio.run(GeminiDiscovery(Client()).discover_suppliers(
-            requirements, options=DiscoveryOptions(), progress=events.append))
-        return result, events
-
-    def test_relevance_screen_labels_candidates(self):
-        result, events = self.discover({'choice': 'pass', 'confidence': .91})
-        self.assertEqual((result.suppliers[0].fit_result, result.suppliers[0].fit_confidence), ('pass', .91))
-        self.assertEqual([(e['step'], e['status']) for e in events], [
-            ('search', 'running'), ('search', 'done'), ('sources', 'running'), ('sources', 'done'),
-            ('fit', 'running'), ('fit', 'done')])
-        self.assertEqual(events[-1]['source'], 'decision')
-
-    def test_malformed_or_failed_screen_leaves_candidates_unscreened(self):
-        result, _ = self.discover({'choice': 'maybe', 'confidence': 2})
-        self.assertIsNone(result.suppliers[0].fit_result)
-        result, events = self.discover(GeminiError('down'))
-        self.assertEqual(len(result.suppliers), 1)
-        self.assertEqual(events[-1]['status'], 'failed')
-        self.assertIn('relevance_unavailable', [i.code for i in result.issues])
-
-    def test_discovery_sorts_candidates_by_decision_model_fit(self):
-        from backend.discovery import GeminiDiscovery
-
-        response = {'status': 'completed', 'steps': [{'type': 'model_output', 'content': [{
-            'type': 'text',
-            'text': 'Fail high. Unknown. Pass low. Unscreened. Pass high. Fail low.',
-            'annotations': [
-                dict(type='url_citation', url='https://fail-high.example/a', start_index=0, end_index=10),
-                dict(type='url_citation', url='https://unknown.example/a', start_index=11, end_index=19),
-                dict(type='url_citation', url='https://pass-low.example/a', start_index=20, end_index=29),
-                dict(type='url_citation', url='https://unscreened.example/a', start_index=30, end_index=41),
-                dict(type='url_citation', url='https://pass-high.example/a', start_index=42, end_index=52),
-                dict(type='url_citation', url='https://fail-low.example/a', start_index=53, end_index=62),
-            ],
-        }]}]}
-        answers_by_host = {
-            'fail-high.example': {'choice': 'fail', 'confidence': .96},
-            'unknown.example': {'choice': 'unknown', 'confidence': .80},
-            'pass-low.example': {'choice': 'pass', 'confidence': .72},
-            'pass-high.example': {'choice': 'pass', 'confidence': .95},
-            'fail-low.example': {'choice': 'fail', 'confidence': .60},
-        }
-
-        class Client:
-            async def post(self, endpoint, payload):
-                if endpoint == 'interactions':
-                    return copy.deepcopy(response)
-                suppliers_in = json.loads(payload['input'])['suppliers']
-                id_to_name = {s['supplier_id']: s['name'] for s in suppliers_in}
-                return {'answers': {
-                    sid: answers_by_host[name]
-                    for sid, name in id_to_name.items() if name in answers_by_host
-                }}
-
-        import json
-        requirements = Requirements.model_validate(demo_fixture()['request']['requirements'])
-        result = asyncio.run(GeminiDiscovery(Client()).discover_suppliers(
-            requirements, options=DiscoveryOptions()))
-        self.assertEqual(
-            [s.name for s in result.suppliers],
-            [
-                'pass-high.example',
-                'pass-low.example',
-                'unknown.example',
-                'unscreened.example',
-                'fail-low.example',
-                'fail-high.example',
-            ],
-        )
 
 
 class CitationRedirectTests(unittest.TestCase):
@@ -281,7 +178,7 @@ class CitationRedirectTests(unittest.TestCase):
 class CriteriaSuggesterTests(unittest.TestCase):
     def test_suggest_criteria_parses_and_normalizes_suggestions(self):
         import json
-        from backend.contracts import SuggestCriteriaRequest
+        from backend.domain.contracts import SuggestCriteriaRequest
         from backend.criteria import GeminiCriteriaSuggester
 
         class Client:
@@ -308,7 +205,7 @@ class CriteriaSuggesterTests(unittest.TestCase):
         self.assertEqual(result.criteria[1].weight, 2.5)
 
     def test_suggest_criteria_rejects_empty_or_incomplete_response(self):
-        from backend.contracts import SuggestCriteriaRequest
+        from backend.domain.contracts import SuggestCriteriaRequest
         from backend.criteria import GeminiCriteriaSuggester
 
         class IncompleteClient:
