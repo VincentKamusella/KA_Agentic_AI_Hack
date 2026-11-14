@@ -994,3 +994,17 @@ test("recommendations switch between a navigable deck and the full list", async 
   previous.click();
   assert.equal(previous.disabled, true);
 });
+
+test("a stale template without the research-details wrapper can still start a run", async (t) => {
+  const calls = [];
+  const dom = setup(server([completedJob], calls));
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  const wrapper = d.getElementById("research-details");
+  wrapper.replaceWith(...wrapper.childNodes);
+  fillBrief(dom);
+  submit(dom);
+  await settle(finished(d));
+  assert.equal(posts(calls).length, 1);
+  assert.equal(d.getElementById("brief-fields").disabled, false);
+});

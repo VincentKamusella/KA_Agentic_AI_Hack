@@ -428,8 +428,8 @@ async function fetchJob(id) {
 async function startResearch(payload, origin) {
   if (busy()) return;
   state.submitting = true;
-  render();
   try {
+    render();
     const job = await postResearch(payload);
     state.watch++; // stop following any earlier job
     Object.assign(state, {
@@ -561,7 +561,9 @@ function render() {
   renderNotes();
   renderCoverage();
   renderSources();
-  $("research-details").hidden = busy() || state.restoring || !state.result;
+  const researchDetails = $("research-details");
+  if (researchDetails)
+    researchDetails.hidden = busy() || state.restoring || !state.result;
   if (busy()) {
     for (const id of [
       "requirements-block",
