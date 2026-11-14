@@ -819,7 +819,7 @@ function withRecommendations() {
   return job;
 }
 
-test("saved recommendations show contact priority, qualification, citations and complete copyable drafts", async (t) => {
+test("saved recommendations show contact priority, qualification, citations and complete email-app drafts", async (t) => {
   const dom = setup(server([withRecommendations()]), jobId);
   t.after(() => dom.window.close());
   const d = dom.window.document;
@@ -842,21 +842,11 @@ test("saved recommendations show contact priority, qualification, citations and 
   assert.equal(mail.searchParams.get("subject"), "Quotation request for alpha");
   assert.match(mail.searchParams.get("body"), /Please quote/);
   assert.equal(section.querySelector(".src-decision"), null);
-  let copied;
-  Object.defineProperty(dom.window.navigator, "clipboard", {
-    value: {
-      writeText: async (value) => {
-        copied = value;
-      },
-    },
-  });
-  section.querySelector('[data-action="copy"]').click();
-  await settle(() => /Draft copied/.test(text(d, "notice")));
+  assert.equal(section.querySelector(".contact-email, textarea"), null);
   assert.equal(
-    copied,
-    "Subject: Quotation request for alpha\n\nHello,\n\nPlease quote for 2.5 pallets delivered worldwide.\n\n[Your name]",
+    mail.searchParams.get("body"),
+    "Hello,\n\nPlease quote for 2.5 pallets delivered worldwide.\n\n[Your name]",
   );
-  assert.match(text(d, "notice"), /copied/);
   assert.ok(d.querySelector("#recommendation .src-rules"));
 });
 
@@ -927,7 +917,7 @@ test("legacy jobs and empty recommendation reports have distinct states", async 
   );
 });
 
-test("recommendation text is untrusted and blocked clipboard access has a manual fallback", async (t) => {
+test("recommendation text is rendered safely without an inline draft", async (t) => {
   const job = withRecommendations();
   job.result.recommendation_report.summary = '<img src=x onerror="alert(1)">';
   job.result.recommendation_report.recommendations[0].reasons[0].text =
@@ -942,9 +932,7 @@ test("recommendation text is untrusted and blocked clipboard access has a manual
   assert.equal(section.querySelector('a[href^="javascript:"]'), null);
 
   assert.equal(d.querySelector("#recommendation-overview"), null);
-  section.querySelector('[data-action="copy"]').click();
-  await settle(() => /Copying is blocked/.test(text(d, "notice")));
-  assert.equal(d.activeElement.id, "contact-email-0");
+  assert.equal(section.querySelector(".contact-email"), null);
 });
 
 test("a failed recommendation retry shows an actionable error and keeps saved results", async (t) => {

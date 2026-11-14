@@ -1019,9 +1019,6 @@ function renderContactRecommendations() {
     state.restoring ||
     (!report && !suppliersOf().length && !issue);
   if (host.hidden) return;
-  const expanded = new Set(
-    [...host.querySelectorAll("details[open]")].map((node) => node.dataset.key),
-  );
   host.replaceChildren(
     h(
       "div",
@@ -1162,8 +1159,6 @@ function renderContactRecommendations() {
     article.append(
       h("div", { class: "contact-evaluation" }, strengths, checks),
     );
-    const key = `${supplier.supplier_id}-email`;
-    const id = `contact-email-${index}`;
     const draft = recommendation.email_draft;
     article.append(
       h(
@@ -1177,40 +1172,6 @@ function renderContactRecommendations() {
         h("p", {
           class: "help",
           text: "Add the recipient and send from your email app.",
-        }),
-      ),
-    );
-    article.append(
-      h(
-        "details",
-        { class: "contact-email", "data-key": key, open: expanded.has(key) },
-        h("summary", { text: "Preview draft" }),
-        h(
-          "div",
-          { class: "block-head" },
-          h("label", { htmlFor: id, text: `Email draft for ${supplier.name}` }),
-          h(
-            "button",
-            {
-              type: "button",
-              class: "btn btn-outline-secondary btn-sm btn-icon",
-              "data-action": "copy",
-              "data-target": id,
-            },
-            icon("copy"),
-            h("span", { text: "Copy draft" }),
-          ),
-        ),
-        h("p", {
-          class: "help",
-          text: "Add the recipient and review the message in your email app before sending.",
-        }),
-        h("textarea", {
-          id,
-          class: "form-control",
-          readOnly: true,
-          rows: 8,
-          value: `Subject: ${draft.subject}\n\n${draft.body}`,
         }),
       ),
     );

@@ -57,3 +57,5 @@ The results view omits the purchase-summary bar. Edit brief and View sources lin
 Recommendation cards show evidence by default in two groups: Why consider this supplier and What to check before ordering. These are side by side on desktop and stacked on mobile; citations are secondary, and the email action follows below. The section introduction contains only a heading and one short qualification message when needed.
 
 Research details is no longer exposed on the results page. Supplier recommendation cards are the results interface; legacy grading/editor DOM remains hidden and inert for compatibility.
+
+Supplier cards expose only Open in email app for outreach. Inline draft previews and their copy control have been removed; the full subject and message are passed to the email app.
