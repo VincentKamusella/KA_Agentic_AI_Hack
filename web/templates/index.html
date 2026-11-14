@@ -2,98 +2,275 @@
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QuotePilot · Supplier discovery</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>QuotePilot · Supplier workspace</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28' fill='none' stroke='%239cb1de' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5h18v14H13l-6 5v-5H5z'/%3E%3Cpath d='m10 11.5 3 3 6-6'/%3E%3C/svg%3E">
+<link rel="preload" href="{% static 'vendor/ibm-plex-sans/ibm-plex-sans-latin-400-normal.woff2' %}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">
 <link rel="stylesheet" href="{% static 'web/app.css' %}">
 <script defer src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+<script defer src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
 <script defer src="{% static 'web/app.js' %}"></script>
 </head>
 <body>
-<div class="app-shell">
-<aside class="sidebar">
-<a class="brand" href="/" aria-label="QuotePilot home"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 5h18v14H13l-6 5v-5H5z"/><path d="m10 11 3 3 6-6"/></svg>QuotePilot</a>
-<nav aria-label="Workspace navigation" class="nav flex-column">
-<a class="nav-link active" href="#/discovery" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Supplier discovery</a>
-<a class="nav-link" href="#/shortlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v17l-7-4-7 4z"/></svg>Shortlist</a>
-<a class="nav-link" href="#/evidence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></svg>Source evidence</a>
-<a class="nav-link" href="#/method"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6"/></svg>Evaluation method</a>
-</nav>
-<div class="sidebar-note"><span class="status-dot"></span>Human-led decisions<p>Research, compare, verify.<br>You make the final call.</p></div>
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-unknown" viewBox="0 0 24 24"><path d="M9 9.2a3 3 0 1 1 4.6 2.5c-.9.6-1.6 1.2-1.6 2.3"/><path d="M12 17.6v.1"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><path d="M7 12h10"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M13.5 5H19v5.5M19 5l-8.5 8.5M10 6.5H6.5A1.5 1.5 0 0 0 5 8v9.5A1.5 1.5 0 0 0 6.5 19H16a1.5 1.5 0 0 0 1.5-1.5V14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7.5h14M10 7.5V5.5h4v2M7 7.5l.8 11h8.4l.8-11M10.5 11v4.5M13.5 11v4.5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-research" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M4.5 5v3.5H8M12 8v4.2l2.8 1.8"/></symbol>
+  <symbol id="i-preferences" viewBox="0 0 24 24"><path d="M4 8h8M18 8h2M4 16h2M12 16h8"/><circle cx="15" cy="8" r="2.5"/><circle cx="9" cy="16" r="2.5"/></symbol>
+  <symbol id="i-suppliers" viewBox="0 0 24 24"><path d="M4 20V11l5 3v-3l5 3V5h6v15zM3 20h18"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.9-6.5-11a6.5 6.5 0 0 1 13 0c0 5.1-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+  <symbol id="i-src-decision" viewBox="0 0 16 16"><path d="M8 1.5 14.5 8 8 14.5 1.5 8z"/><path d="M8 5v6M5 8h6"/></symbol>
+  <symbol id="i-src-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 4 4"/></symbol>
+  <symbol id="i-src-code" viewBox="0 0 16 16"><path d="m5.5 4-4 4 4 4M10.5 4l4 4-4 4"/></symbol>
+  <symbol id="i-src-rules" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h7"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h10v10H9zM15 9V5H5v10h4"/></symbol>
+</svg>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="app" id="app">
+<aside class="sidebar" aria-label="Main navigation">
+  <div class="sidebar-top">
+    <button type="button" id="nav-toggle" class="nav-item nav-toggle" aria-expanded="false" aria-controls="sidebar-nav" aria-label="Expand navigation" title="Expand navigation"><svg aria-hidden="true"><use href="#i-menu"/></svg></button>
+    <a class="brand" href="#/brief">QuotePilot</a>
+  </div>
+  <div class="sidebar-body" id="sidebar-nav">
+    <nav aria-label="Workspace">
+      <a class="nav-item" href="#/brief" id="nav-research" title="Current research" aria-current="page"><svg aria-hidden="true"><use href="#i-research"/></svg><span class="nav-label">Current research</span></a>
+      <button type="button" class="nav-item" disabled title="History: not available yet"><svg aria-hidden="true"><use href="#i-history"/></svg><span class="nav-label">History</span><span class="soon">Soon</span></button>
+      <button type="button" class="nav-item" disabled title="Preferences: not available yet"><svg aria-hidden="true"><use href="#i-preferences"/></svg><span class="nav-label">Preferences</span><span class="soon">Soon</span></button>
+      <button type="button" class="nav-item" disabled title="Old suppliers: not available yet"><svg aria-hidden="true"><use href="#i-suppliers"/></svg><span class="nav-label">Old suppliers</span><span class="soon">Soon</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <button type="button" class="nav-item" disabled title="Settings: not available yet"><svg aria-hidden="true"><use href="#i-settings"/></svg><span class="nav-label">Settings</span><span class="soon">Soon</span></button>
+    </div>
+  </div>
 </aside>
-<main>
-<div class="title-row"><div><h1 id="page-title" tabindex="-1">Industrial supplier discovery</h1><p id="page-description">Find suppliers, assess their capabilities, and build an evidence-backed shortlist.</p></div><button type="button" id="reset" class="btn btn-outline-secondary btn-sm">New search</button></div>
 
-<div id="notice" class="visually-hidden" role="status" aria-live="polite"></div><div id="error" class="alert alert-danger" role="alert" hidden></div>
+<main id="main" tabindex="-1">
+  <div id="notice" class="visually-hidden" role="status" aria-live="polite"></div>
 
-<section id="view-discovery" data-view="discovery" aria-labelledby="page-title">
-<form id="requirements" class="search-panel">
-<div class="section-heading"><h2>Describe the supplier you need.</h2><span class="subtle">Discovery brief</span></div>
-<div class="search-input-row"><div class="search-field"><label for="product" class="visually-hidden">What are you sourcing?</label><textarea class="form-control" id="product" required maxlength="1000" rows="2" placeholder="For example: manufacturers of precision steel bolts for industrial equipment"></textarea></div><button id="discover" type="submit" class="btn btn-primary">Find my shortlist <span aria-hidden="true">→</span></button></div>
-<div class="brief-options"><div><label class="form-label" for="quantity">Quantity</label><input class="form-control" id="quantity" type="number" min="1" step="1" placeholder="Quantity" required></div><div><label class="form-label" for="country">Delivery country</label><input class="form-control" id="country" maxlength="100" placeholder="Country" required></div></div>
-<details class="mt-3"><summary>Search scope and budgets</summary>
-<div class="row g-3 mt-1">
-<div class="col-sm-4"><label class="form-label" for="supplier-budget">Candidates to research</label><select id="supplier-budget" class="form-select"><option value="30">30 suppliers</option><option value="60">60 suppliers</option><option value="100">100 suppliers</option></select></div>
-<div class="col-sm-4"><label class="form-label" for="query-budget">Search budget</label><select id="query-budget" class="form-select"><option value="8">8 search passes</option><option value="16">16 search passes</option><option value="24">24 search passes</option></select></div>
-<div class="col-sm-4"><label class="form-label" for="page-budget">Pages per supplier</label><select id="page-budget" class="form-select"><option value="5">5 pages</option><option value="10">10 pages</option><option value="20">20 pages</option></select></div>
-<div class="col-sm-6"><label class="form-label" for="search-countries">Supplier regions</label><input id="search-countries" class="form-control" maxlength="800" placeholder="Germany, Poland, worldwide"><p class="help">Comma-separated; defaults to delivery country and worldwide.</p></div>
-<div class="col-sm-6"><label class="form-label" for="search-languages">Search languages</label><input id="search-languages" class="form-control" maxlength="800" value="English, local language"></div>
-<div class="col-12 form-check ms-2"><input id="refresh-sources" class="form-check-input" type="checkbox"><label for="refresh-sources" class="form-check-label">Fetch fresh sources instead of using the 24-hour cache</label></div>
-</div></details>
-<p id="mode-note" class="help">Searches across sources and languages, then retrieves supplier pages. Larger budgets take longer and use more API calls. Research is saved on this server; this browser remembers your latest job. Public search cannot guarantee every supplier.</p>
-</form>
-<ol class="stages" aria-label="Workflow"><li id="stage-discover" aria-current="step"><span>1</span>Discovery</li><li id="stage-eval"><span>2</span>Evaluation</li><li id="stage-shortlist"><span>3</span>Shortlist</li></ol>
-<div class="workspace">
-<aside class="criteria-panel"><div class="section-heading"><h2>Decision criteria</h2><div class="criteria-actions"><button id="suggest" type="button" class="btn btn-link btn-sm p-0" hidden>Suggest</button><button id="add" type="button" class="btn btn-link btn-sm p-0">Add</button></div></div>
-<p class="help">Every criterion listed under <strong>Used for evaluation</strong> is assessed against supplier evidence. Mandatory gates determine eligibility; preferences rank eligible suppliers.</p>
-<div id="suggested-box" class="suggested-box" hidden>
-<div class="suggested-head"><span>Optional suggestions (check to include)</span><button id="select-all-suggestions" type="button" class="btn btn-link btn-sm p-0" hidden>Select all</button></div>
-<p id="suggested-status" class="help" role="status" aria-live="polite"></p>
-<div id="suggested-criteria" class="suggested-list"></div>
+  <!-- Brief -->
+  <section id="view-brief" data-view="brief" aria-labelledby="brief-title">
+    <div class="page-head">
+      <div>
+        <h1 id="brief-title">New supplier search</h1>
+        <p>Describe the purchase in your own words. QuotePilot turns it into requirements, searches for suppliers, and checks the evidence it finds against each requirement.</p>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+    </div>
+    <form id="brief-form" class="brief-form" novalidate>
+      <fieldset id="brief-fields">
+        <div id="form-error" class="note note-error" role="alert" tabindex="-1" hidden></div>
+
+        <section class="form-block" aria-labelledby="purchase-title">
+          <h2 id="purchase-title">Purchase</h2>
+          <div class="field">
+            <label class="form-label" for="product">What do you need?</label>
+            <textarea class="form-control" id="product" required maxlength="1000" rows="3" placeholder="For example: food-grade aluminium containers, 750 ml" aria-describedby="product-help product-error"></textarea>
+            <p class="help" id="product-help">Name the product and its essential specifications, such as material, size, standard or grade.</p>
+            <p class="field-error" id="product-error" hidden></p>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="form-label" for="quantity">Quantity</label>
+              <div class="input-group">
+                <input class="form-control" id="quantity" type="number" inputmode="decimal" min="0" step="any" required placeholder="5000" aria-describedby="quantity-error">
+                <select class="form-select" id="unit" aria-label="Quantity unit">
+                  <option value="pieces">pieces</option>
+                  <option value="kg">kg</option>
+                  <option value="tonnes">tonnes</option>
+                  <option value="metres">metres</option>
+                  <option value="litres">litres</option>
+                  <option value="custom">Other unit…</option>
+                </select>
+              </div>
+              <div id="unit-custom-field" hidden>
+                <label class="visually-hidden" for="unit-custom">Custom unit</label>
+                <input class="form-control" id="unit-custom" maxlength="40" placeholder="Unit, for example pallets" aria-describedby="quantity-error">
+              </div>
+              <p class="field-error" id="quantity-error" hidden></p>
+            </div>
+            <div class="field">
+              <span class="form-label" id="area-label">Delivery destination</span>
+              <button type="button" id="area-open" class="form-control area-button" aria-labelledby="area-label area-text" aria-describedby="area-note area-error"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="area-text">Select on the map</span></button>
+              <p class="field-error" id="area-error" hidden></p>
+            </div>
+          </div>
+          <p class="help" id="area-note">The destination is where the goods are shipped to, not where they are made.</p>
+          <div class="field field-date">
+            <label class="form-label" for="needed-by">Needed by <span class="optional">Optional</span></label>
+            <input class="form-control" id="needed-by" type="date" aria-describedby="needed-by-help needed-by-error">
+            <p class="help" id="needed-by-help">Leave empty if the date is flexible.</p>
+            <p class="field-error" id="needed-by-error" hidden></p>
+          </div>
+        </section>
+
+        <section class="form-block" aria-labelledby="other-title">
+          <h2 id="other-title"><label for="other">Other requirements</label> <span class="optional">Optional</span></h2>
+          <textarea class="form-control" id="other" maxlength="4000" rows="4" placeholder="EU manufacturing required; recyclable packaging preferred." aria-describedby="other-help other-error"></textarea>
+          <p class="help" id="other-help">Say which points are required and which are only preferred. Required points become must-haves that a supplier has to meet; preferred points are used to rank the suppliers that do. You can review and adjust this reading once the search has started.</p>
+          <p class="field-error" id="other-error" hidden></p>
+        </section>
+
+        <div id="brief-note" class="note" hidden></div>
+
+        <div class="action-bar">
+          <button id="submit" type="submit" class="btn btn-primary btn-icon" data-busy-lock>Find my shortlist<svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <p class="help">Research runs on the server and is saved there; this browser remembers your latest search. Public search cannot guarantee every supplier. No orders are placed and no messages are sent to suppliers.</p>
+        </div>
+      </fieldset>
+    </form>
+  </section>
+
+  <!-- Shortlist -->
+  <section id="view-results" data-view="results" aria-labelledby="results-title" hidden>
+    <div class="page-head">
+      <div>
+        <h1 id="results-title">Shortlist</h1>
+        <p>Must-haves decide who is eligible. Nice-to-haves rank the eligible suppliers. Every result links to the evidence behind it.</p>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+    </div>
+    <div class="brief-summary" data-brief-summary hidden></div>
+    <div id="results-state"></div>
+    <div id="recommendation" class="recommendation" hidden></div>
+
+    <section id="requirements-block" class="content-block" aria-labelledby="requirements-title" hidden>
+      <div class="block-head">
+        <h2 id="requirements-title">Your requirements</h2>
+        <button type="button" id="adjust" class="btn btn-outline-secondary btn-sm" data-action="adjust">Adjust requirements</button>
+      </div>
+      <p class="help" id="requirements-help"></p>
+      <div id="requirements-view" class="requirements"></div>
+      <form id="requirements-editor" class="requirements-editor" novalidate hidden>
+        <div id="editor-error" class="note note-error" role="alert" tabindex="-1" hidden></div>
+        <ol id="criteria" class="criteria"></ol>
+        <div class="editor-actions">
+          <button id="add" type="button" class="btn btn-outline-secondary btn-sm btn-icon"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add requirement</button>
+          <button id="suggest" type="button" class="btn btn-outline-secondary btn-sm" data-action="suggest">Suggest requirements</button>
+        </div>
+        <div id="suggested-box" class="suggested-box" hidden>
+          <p id="suggested-status" class="help" role="status" aria-live="polite"></p>
+          <ul id="suggested-criteria" class="suggested-list"></ul>
+        </div>
+        <div class="action-bar">
+          <button type="submit" class="btn btn-primary" data-busy-lock>Update shortlist</button>
+          <button type="button" class="btn btn-outline-secondary" data-action="cancel-adjust">Cancel</button>
+          <p class="help">Checks the evidence already collected against the edited requirements. No new search is run.</p>
+        </div>
+      </form>
+    </section>
+
+    <div id="results-content" hidden>
+      <section aria-labelledby="comparison-title" class="content-block">
+        <h2 id="comparison-title">Comparison</h2>
+        <p class="help" id="comparison-progress" hidden></p>
+        <div id="comparison"></div>
+        <p class="help">The numbered columns are your requirements, in the order listed above. Select a result to open the evidence behind it. Evidence coverage is the share of requirements with a pass or fail result.</p>
+      </section>
+      <section aria-labelledby="details-title" class="content-block">
+        <h2 id="details-title">Assessment details</h2>
+        <div id="details"></div>
+      </section>
+    </div>
+
+    <section id="decision-performance" class="content-block" aria-labelledby="performance-title" hidden></section>
+    <section id="notes-block" class="content-block" aria-labelledby="notes-title" hidden>
+      <h2 id="notes-title">Research notes</h2>
+      <div id="results-notes"></div>
+    </section>
+    <section id="coverage" class="content-block" aria-labelledby="coverage-title" hidden></section>
+  </section>
+
+  <!-- Sources -->
+  <section id="view-sources" data-view="sources" aria-labelledby="sources-title" hidden>
+    <div class="page-head">
+      <div>
+        <h1 id="sources-title">Sources</h1>
+        <p>Every supplier that was researched, with the passages collected from its pages. Supplier identity and terms still need your own verification.</p>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+    </div>
+    <div class="brief-summary" data-brief-summary hidden></div>
+    <div id="sources-state"></div>
+    <div id="sources-content" hidden>
+      <p id="sources-count" class="toolbar-title"></p>
+      <div id="sources-list" class="supplier-list"></div>
+      <section id="deferred" class="content-block" aria-labelledby="deferred-title" hidden></section>
+    </div>
+  </section>
+</main>
 </div>
-<div class="active-criteria-head"><span>Used for evaluation</span><span id="active-criteria-count" class="badge">0</span></div>
-<p id="criteria-sync-note" class="criteria-sync-note" hidden>Criteria changed — re-run evaluation to apply.</p>
-<div id="criteria"></div>
-<p id="criteria-empty" class="help">No criteria selected. Check a suggestion above or click Add.</p>
-<p class="help">Quantity and destination guide discovery. Add explicit criteria to assess them.</p>
-<p class="footnote">No orders placed.<br>No supplier messages sent.</p></aside>
-<section class="results" aria-labelledby="results-title">
-<div class="section-heading results-heading"><h2 id="results-title">Supplier workspace</h2><span id="source-label" class="badge bg-secondary-subtle text-secondary-emphasis">Gemini</span></div>
-<div id="workspace-state" class="workspace-state" role="status" aria-live="polite">
-<div id="loading" hidden><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span><span id="loading-message">Request in progress</span> <span id="loading-time" aria-hidden="true"></span></div>
-<h3 id="state-title">Start with your purchase brief</h3><p id="state-description">Describe the product, quantity, and destination. Add the requirements suppliers must meet, then find your shortlist.</p>
-<button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry research</button>
-<a id="view-shortlist-action" class="btn btn-primary btn-sm" href="#/shortlist" hidden>View shortlist</a>
+
+<div class="modal fade" id="area-modal" tabindex="-1" aria-labelledby="area-title" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-md-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="area-title">Delivery destination</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="area-body" data-scope="radius">
+        <div class="btn-group area-scope" role="group" aria-label="Type of delivery destination">
+          <input type="radio" class="btn-check" name="area-scope" id="scope-radius" value="radius" checked>
+          <label class="btn btn-outline-secondary" for="scope-radius">Radius</label>
+          <input type="radio" class="btn-check" name="area-scope" id="scope-countries" value="countries">
+          <label class="btn btn-outline-secondary" for="scope-countries">Countries</label>
+          <input type="radio" class="btn-check" name="area-scope" id="scope-continents" value="continents">
+          <label class="btn btn-outline-secondary" for="scope-continents">Continents</label>
+          <input type="radio" class="btn-check" name="area-scope" id="scope-world" value="world">
+          <label class="btn btn-outline-secondary" for="scope-world">Worldwide</label>
+        </div>
+        <form id="area-search" class="area-search" role="search">
+          <label class="visually-hidden" for="area-query" id="area-query-label">Search for a place</label>
+          <input class="form-control" id="area-query" type="search" maxlength="200" autocomplete="off">
+          <button type="submit" class="btn btn-outline-secondary">Search</button>
+        </form>
+        <ul id="area-results" class="area-results" hidden></ul>
+        <div id="area-continents" class="area-continents" role="group" aria-label="Continents">
+          <input type="checkbox" class="btn-check" id="continent-africa" value="Africa">
+          <label class="btn btn-outline-secondary btn-sm" for="continent-africa">Africa</label>
+          <input type="checkbox" class="btn-check" id="continent-asia" value="Asia">
+          <label class="btn btn-outline-secondary btn-sm" for="continent-asia">Asia</label>
+          <input type="checkbox" class="btn-check" id="continent-europe" value="Europe">
+          <label class="btn btn-outline-secondary btn-sm" for="continent-europe">Europe</label>
+          <input type="checkbox" class="btn-check" id="continent-north-america" value="North America">
+          <label class="btn btn-outline-secondary btn-sm" for="continent-north-america">North America</label>
+          <input type="checkbox" class="btn-check" id="continent-oceania" value="Oceania">
+          <label class="btn btn-outline-secondary btn-sm" for="continent-oceania">Oceania</label>
+          <input type="checkbox" class="btn-check" id="continent-south-america" value="South America">
+          <label class="btn btn-outline-secondary btn-sm" for="continent-south-america">South America</label>
+        </div>
+        <div id="area-map" class="area-map" data-countries-url="{% static 'vendor/natural-earth/countries.json' %}" aria-label="Satellite map for selecting the delivery destination."></div>
+        <div class="area-controls">
+          <div class="area-radius">
+            <label class="form-label" for="area-radius">Radius <output id="area-radius-value" for="area-radius">50 km</output></label>
+            <input type="range" class="form-range" id="area-radius" min="5" max="500" step="5" value="50">
+          </div>
+          <p id="area-status" class="area-status" role="status"></p>
+        </div>
+        <ul id="area-chips" class="area-chips" aria-label="Selected countries" hidden></ul>
+        <p class="help" id="area-help"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="area-confirm" disabled>Use this destination</button>
+      </div>
+    </div>
+  </div>
 </div>
-<section id="run-trace" class="run-trace" aria-labelledby="run-trace-title" hidden>
-<div class="run-trace-head"><span class="run-indicator" aria-hidden="true"></span><h3 id="run-trace-title">Live run</h3><span id="run-trace-summary" class="run-trace-summary"></span><span id="run-trace-time" class="run-time" aria-hidden="true"></span></div>
-<ol id="run-steps" class="run-steps"></ol>
-<div class="provenance-key" aria-label="Provenance key"><span data-source-tag="decision"></span><span data-source-tag="search"></span><span data-source-tag="code"></span><span data-source-tag="rules"></span></div>
-</section>
-<div class="research-totals" aria-label="Research summary"><div><span>Discovered suppliers</span><strong id="total-suppliers">0</strong></div><div><span>Source excerpts</span><strong id="total-evidence">0</strong></div><div><span>Shortlisted</span><strong id="total-shortlist">0</strong></div></div>
-<div id="coverage" class="mt-3" aria-live="polite" hidden></div>
-<div id="content" hidden><div class="result-actions"><div><p id="count"></p><p id="eval-criteria-preview" class="eval-criteria-preview"></p></div><button id="evaluate" type="button" class="btn btn-primary">Re-run evaluation <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
-</section></div></section>
-<section id="view-shortlist" data-view="shortlist" aria-labelledby="page-title" hidden>
-<div class="view-toolbar"><span class="subtle">Mandatory gates first. Preference ranking second.</span><span class="provenance-key compact"><span data-source-tag="decision"></span><span data-source-tag="rules"></span></span><div class="criteria-actions"><button id="reevaluate" type="button" class="btn btn-primary btn-sm" hidden>Re-run evaluation</button><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Edit criteria</a></div></div>
-<div id="shortlist-empty" class="view-empty"><h2 id="shortlist-empty-title">No evaluation yet.</h2><p id="shortlist-empty-desc">Submit your brief to research suppliers and build your shortlist.</p><div class="view-empty-actions"><button id="shortlist-empty-eval" type="button" class="btn btn-primary" hidden>Re-run evaluation</button><a class="btn btn-outline-secondary" href="#/discovery">Go to discovery</a></div></div>
-<div id="recommendation" class="alert alert-success" hidden></div><div id="evaluated-criteria" class="evaluated-criteria" hidden></div><div id="decision-performance" class="decision-perf" hidden></div><div id="comparison"></div>
-<div id="shortlist-evidence-link" hidden><a class="btn btn-outline-secondary btn-sm" href="#/evidence">Inspect supporting evidence →</a></div>
-</section>
-<section id="view-evidence" data-view="evidence" aria-labelledby="page-title" hidden>
-<div class="view-toolbar"><span class="subtle">Source excerpts, criterion assessments, and clarification drafts.</span><span class="provenance-key compact"><span data-source-tag="decision"></span><span data-source-tag="search"></span></span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Back to discovery</a></div>
-<div id="evidence-empty" class="view-empty"><h2>No source evidence yet.</h2><p>Run discovery to collect supplier sources. Evaluation adds criterion-level assessments.</p><a class="btn btn-primary" href="#/discovery">Find suppliers</a></div>
-<div id="sources"></div>
-</section>
-<section id="view-method" data-view="method" aria-labelledby="page-title" hidden>
-<div class="method-content">
-<h2>1. Discover suppliers and retrieve evidence</h2><p>Multiple searches explore manufacturers, specialists, directories, and distributors across your chosen regions and languages. We retrieve relevant pages and PDFs from candidate sites and retain source passages. Search summaries are used only to find candidates. Blocked or unreadable pages remain research gaps, not supplier failures. Coverage shows the searches performed and why research stopped; it does not establish completeness. Company metadata and observed redirects help identify duplicates, but identity and terms still need human verification.</p>
-<h2>2. Assess every criterion</h2><p>Each source excerpt is assessed as pass, fail, or unknown. Live decisions below the provisional 85% confidence threshold abstain. Conflicting evidence also becomes unknown. The threshold has not been calibrated on customer examples.</p>
-<h2>3. Apply mandatory gates</h2><p>A mandatory failure makes a supplier ineligible. An unknown mandatory criterion requires verification. Preference scores cannot override either outcome. With no mandatory criteria, the shortlist reflects preferences only.</p>
-<h2>4. Rank eligible suppliers</h2><p>Supported preferences earn 100 points; failed or unknown preferences earn zero. Each criterion uses your chosen weight, and all preference weights stay in the denominator. Ties are broken by evidence coverage, then supplier ID. Up to three eligible suppliers are shortlisted.</p>
-<h2>5. Verify before purchasing</h2><p>Quantity and destination guide discovery unless you include them as explicit criteria. This is a research shortlist, not a quotation or purchasing approval. QuotePilot does not place orders or send supplier messages.</p>
-<a class="btn btn-outline-secondary" href="#/discovery">Back to discovery</a>
-</div>
-</section>
-</main></div>
-</body></html>
+</body>
+</html>

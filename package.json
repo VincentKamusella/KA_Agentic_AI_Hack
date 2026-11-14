@@ -1,6 +1,8 @@
 {
   "dependencies": {
-    "bootstrap": "5.3.9"
+    "bootstrap": "5.3.9",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "leaflet": "1.9.4"
   },
   "devDependencies": {
     "jsdom": "^31.0.1",
@@ -10,8 +12,9 @@
   "private": true,
   "scripts": {
     "build": "node scripts/vendor-ui.mjs",
-    "format": "prettier --write web/static/web scripts/vendor-ui.mjs",
-    "check": "prettier --check web/static/web scripts/vendor-ui.mjs && node --check web/static/web/app.js",
-    "test": "node --test tests/*.test.mjs"
+    "format": "prettier --write web/static/web scripts/vendor-ui.mjs scripts/build-countries.mjs tests",
+    "check": "prettier --check web/static/web scripts/vendor-ui.mjs scripts/build-countries.mjs tests && node --check web/static/web/app.js",
+    "test": "node --test tests/*.test.mjs",
+    "build:countries": "node scripts/build-countries.mjs"
   }
 }
