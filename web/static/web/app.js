@@ -1153,16 +1153,12 @@ function renderContactRecommendations() {
       h("div", { class: "contact-evaluation" }, strengths, checks),
     );
     const draft = recommendation.email_draft;
-    article.append(
-      h(
-        "div",
-        { class: "contact-outreach" },
-        h("a", {
-          class: "btn btn-primary contact-compose",
-          href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,
-          text: "Open in email app",
-        }),
-      ),
+    article.querySelector(".contact-heading").append(
+      h("a", {
+        class: "btn btn-primary contact-compose",
+        href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,
+        text: "Open in email app",
+      }),
     );
     list.append(article);
   });
