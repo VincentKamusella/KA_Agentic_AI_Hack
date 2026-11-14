@@ -7,7 +7,10 @@ let suppliers = [],
   coverageRenderKey = "",
   evaluation = null,
   busy = false,
-  criterionCounter = 0;
+  criterionCounter = 0,
+  suggestTimer = null,
+  suggestAbort = null,
+  suggestedBriefKey = "";
 const labels = {
   eligible: "Eligible",
   ineligible: "Not eligible",
@@ -127,8 +130,27 @@ function setBusy(value, message = "") {
     .querySelectorAll("button,input,select,textarea")
     .forEach((n) => (n.disabled = value));
   $("add").disabled = value || $("criteria").children.length >= 12;
+  $("suggest").disabled = value;
   if (message) notice(message);
   $("content").setAttribute("aria-busy", String(value));
+}
+function updateCriteriaHint() {
+  $("criteria-empty").hidden = $("criteria").children.length > 0;
+  $("add").disabled = busy || $("criteria").children.length >= 12;
+}
+function syncSuggestionChecks() {
+  const active = new Set(
+    [...$("criteria").children].map((row) => row.dataset.id),
+  );
+  for (const input of $("suggested-criteria").querySelectorAll(
+    "input[type='checkbox']",
+  ))
+    input.checked = active.has(input.dataset.criterionId);
+  const all = [
+    ...$("suggested-criteria").querySelectorAll("input[type='checkbox']"),
+  ];
+  $("select-all-suggestions").hidden =
+    !all.length || all.every((input) => input.checked);
 }
 function readRequirements() {
   return {
@@ -234,7 +256,8 @@ function addCriterion(
   remove.type = "button";
   remove.addEventListener("click", () => {
     row.remove();
-    $("add").disabled = false;
+    updateCriteriaHint();
+    syncSuggestionChecks();
     invalidate();
   });
   description.addEventListener("input", () => invalidate());
@@ -242,7 +265,133 @@ function addCriterion(
   controls.append(kind, weightField, remove);
   row.append(label, description, controls);
   $("criteria").append(row);
-  $("add").disabled = $("criteria").children.length >= 12;
+  updateCriteriaHint();
+  syncSuggestionChecks();
+}
+function csrfToken() {
+  return (
+    document.cookie
+      .split("; ")
+      .find((x) => x.startsWith("csrftoken="))
+      ?.split("=")[1] || ""
+  );
+}
+function briefPayload() {
+  const qty = Number($("quantity").value);
+  return {
+    product: $("product").value.trim(),
+    quantity: Number.isInteger(qty) && qty > 0 ? qty : null,
+    delivery_country: $("country").value.trim(),
+  };
+}
+function renderSuggestions(items) {
+  $("suggested-criteria").replaceChildren();
+  for (const item of items) {
+    const id = `suggest-${item.id}`;
+    const wrap = el("div", undefined, "form-check suggested-item");
+    const box = el("input", undefined, "form-check-input");
+    box.type = "checkbox";
+    box.id = id;
+    box.dataset.criterionId = item.id;
+    box.disabled = busy;
+    box.addEventListener("change", () => {
+      if (box.checked) {
+        if ($("criteria").children.length >= 12) {
+          box.checked = false;
+          error("You can include at most 12 decision criteria.");
+          return;
+        }
+        const existing = [...$("criteria").children].find(
+          (row) => row.dataset.id === item.id,
+        );
+        if (!existing) addCriterion(item);
+      } else {
+        const existing = [...$("criteria").children].find(
+          (row) => row.dataset.id === item.id,
+        );
+        existing?.remove();
+        updateCriteriaHint();
+      }
+      syncSuggestionChecks();
+      invalidate();
+    });
+    const label = el("label", undefined, "form-check-label");
+    label.htmlFor = id;
+    label.append(
+      el("span", item.description, "suggested-desc"),
+      el(
+        "small",
+        item.kind === "mandatory"
+          ? "Mandatory gate"
+          : `Preference · weight ${item.weight}`,
+        "suggested-meta",
+      ),
+    );
+    wrap.append(box, label);
+    $("suggested-criteria").append(wrap);
+  }
+  syncSuggestionChecks();
+}
+async function fetchSuggestions(brief, { manual = false } = {}) {
+  suggestAbort?.abort();
+  const controller = new AbortController();
+  suggestAbort = controller;
+  $("suggested-box").hidden = false;
+  $("suggested-box").dataset.state = "loading";
+  $("suggested-status").textContent = "Generating suggested criteria…";
+  $("select-all-suggestions").hidden = true;
+  try {
+    const response = await fetch("/api/suggest-criteria/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken(),
+      },
+      body: JSON.stringify(brief),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({
+      error: "Could not read suggested criteria.",
+    }));
+    if (!response.ok)
+      throw new Error(data.error || "Could not generate suggested criteria.");
+    if (suggestAbort !== controller) return;
+    suggestedBriefKey = JSON.stringify(brief);
+    $("suggested-box").dataset.state = "ready";
+    renderSuggestions(data.criteria || []);
+    $("suggested-status").textContent = (data.criteria || []).length
+      ? "Check any criteria to include them in evaluation."
+      : "No suggestions generated. Click Add to write your own.";
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    if (suggestAbort !== controller) return;
+    $("suggested-box").dataset.state = "error";
+    $("suggested-status").textContent = manual
+      ? e.message
+      : "Automatic suggestions unavailable; click Suggest to retry or Add your own.";
+  }
+}
+function scheduleSuggestions(immediate = false) {
+  clearTimeout(suggestTimer);
+  const brief = briefPayload();
+  if (brief.product.length < 4) {
+    suggestAbort?.abort();
+    if (immediate) {
+      $("suggested-box").hidden = false;
+      $("suggested-box").dataset.state = "error";
+      $("suggested-status").textContent =
+        "Enter at least a short product description first.";
+      $("suggested-criteria").replaceChildren();
+      $("select-all-suggestions").hidden = true;
+    } else if (!$("suggested-criteria").children.length) {
+      $("suggested-box").hidden = true;
+    }
+    return;
+  }
+  const key = JSON.stringify(brief);
+  if (!immediate && key === suggestedBriefKey) return;
+  if (immediate) fetchSuggestions(brief, { manual: true });
+  else suggestTimer = setTimeout(() => fetchSuggestions(brief), 800);
 }
 async function post() {
   const csrf = document.cookie
@@ -908,12 +1057,11 @@ function hideTrace() {
 $("requirements").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
-  if (!$("criteria").children.length) {
-    error("Add at least one decision criterion.");
-    return;
-  }
   error();
   invalidate(true);
+  const brief = briefPayload();
+  if (brief.product.length >= 4 && JSON.stringify(brief) !== suggestedBriefKey)
+    fetchSuggestions(brief);
   setWorkspaceState("searching");
   setBusy(true, "Searching supplier sources with Gemini…");
   startTrace("discover");
@@ -951,6 +1099,11 @@ $("requirements").addEventListener("submit", async (event) => {
 });
 $("evaluate").addEventListener("click", async () => {
   if (busy || !$("requirements").reportValidity()) return;
+  if (!$("criteria").children.length) {
+    error("Select or add at least one decision criterion for evaluation.");
+    $("add").focus();
+    return;
+  }
   error();
   setWorkspaceState("evaluating");
   setBusy(true, "Evaluating evidence against your criteria…");
@@ -1005,12 +1158,20 @@ for (const id of [
 function reset(navigate = true) {
   if (busy) return;
   if (navigate) location.hash = "/discovery";
+  clearTimeout(suggestTimer);
+  suggestAbort?.abort();
+  suggestAbort = null;
+  suggestedBriefKey = "";
   error();
   $("product").value = "";
   $("quantity").value = "";
   $("country").value = "";
   $("criteria").replaceChildren();
-  addCriterion();
+  $("suggested-criteria").replaceChildren();
+  $("suggested-status").textContent = "";
+  $("suggested-box").hidden = true;
+  $("select-all-suggestions").hidden = true;
+  updateCriteriaHint();
   invalidate(true);
   notice("Enter your purchase brief and decision criteria to find suppliers.");
 }
