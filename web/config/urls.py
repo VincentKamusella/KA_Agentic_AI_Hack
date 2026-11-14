@@ -16,5 +16,6 @@ urlpatterns = [
     path("health/", health, name="health"),
     path("api/research/", views.start_research, name="start-research"),
     path("api/research/<str:job_id>/", views.research_status, name="research-status"),
+    path("api/suggest-criteria/", views.suggest_criteria, name="suggest-criteria"),
     path("admin/", admin.site.urls),
 ]

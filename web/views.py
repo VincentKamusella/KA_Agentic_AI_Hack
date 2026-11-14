@@ -1,13 +1,19 @@
 """HTTP requests enqueue backend work and retrieve saved results."""
+import asyncio
 import json
 from pydantic import ValidationError
 
+from asgiref.sync import async_to_sync
 from django.core.exceptions import RequestDataTooBig
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
+from pydantic import ValidationError
 
+from backend.criteria import GeminiCriteriaSuggester
+from backend.domain.contracts import SuggestCriteriaRequest
+from backend.integrations.gemini import GeminiClient, GeminiError
 from backend.research.requests import StageRequest
 
 
@@ -24,51 +30,21 @@ def index(request):
     return render(request, "index.html")
 
 
-STREAM_TYPE = "application/x-ndjson"
-
-
-def stage_error(exc):
-    """Map a stage failure to (HTTP status, safe browser message)."""
-    if isinstance(exc, GeminiError):
-        return 502, str(exc)
-    if isinstance(exc, TimeoutError):
-        return 504, "This stage timed out. Reduce the number of criteria and retry."
-    logger.error("QuotePilot stage failed", exc_info=exc)
-    return 500, "Analysis failed unexpectedly. Please retry; server logs contain the details."
-
-
-def stream_stage(run):
-    """Run a stage in a worker thread and stream its real progress as NDJSON.
-
-    Lines are {"type": "step"|"supplier", ...} events, then exactly one
-    {"type": "result", "data": ...} or {"type": "error", "status", "error"}.
-    """
-    events = queue.Queue()
-    started = time.monotonic()
-
-    def progress(event):
-        events.put({**event, "elapsed": round(time.monotonic() - started, 2)})
-
-    def worker():
-        try:
-            events.put({"type": "result", "data": run(progress).model_dump(mode="json")})
-        except Exception as exc:  # Reported to the browser as a terminal event.
-            status, message = stage_error(exc)
-            events.put({"type": "error", "status": status, "error": message})
-
-    threading.Thread(target=worker, daemon=True).start()
-
-    def lines():
-        while True:
-            event = events.get()
-            yield json.dumps(event) + "\n"
-            if event["type"] in ("result", "error"):
-                return
-
-    response = StreamingHttpResponse(lines(), content_type=STREAM_TYPE)
-    response["Cache-Control"] = "no-cache"
-    response["X-Accel-Buffering"] = "no"
-    return response
+@require_POST
+def suggest_criteria(request):
+    if request_too_large(request) or len(request.body) > 50_000:
+        return JsonResponse({"error": "Request is too large."}, status=413)
+    try:
+        payload = SuggestCriteriaRequest.model_validate(json.loads(request.body))
+        service = GeminiCriteriaSuggester(GeminiClient())
+        result = async_to_sync(asyncio.wait_for)(service.suggest_criteria(payload), timeout=60)
+    except (ValueError, ValidationError):
+        return JsonResponse({"error": "Enter a product description before generating criteria."}, status=400)
+    except GeminiError as exc:
+        return JsonResponse({"error": str(exc)}, status=502)
+    except TimeoutError:
+        return JsonResponse({"error": "Criteria suggestion timed out. Please retry."}, status=504)
+    return JsonResponse(result.model_dump(mode="json"))
 
 
 @require_POST
