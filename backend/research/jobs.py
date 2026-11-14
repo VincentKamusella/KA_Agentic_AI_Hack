@@ -47,6 +47,7 @@ def execute_job(store, job_id, lease_id):
         assign_fit_ranks,
         build_decision_metrics,
     )
+    from backend.evaluation.sustainability import score_suppliers_sustainability
     from backend.integrations.gemini import GeminiClient, GeminiError
     from backend.research.pipeline import shortlist
     from backend.research.recommendations import GeminiRecommendationAgent, add_recommendations
@@ -101,14 +102,29 @@ def execute_job(store, job_id, lease_id):
 
         evaluation.metrics = build_decision_metrics([], 0.0, discovery_ranking=discovery_ranking)
         await checkpoint(combined(), 'evaluation')
+        needs_sust = (
+            [
+                s for s in suppliers
+                if s.sustainability_rating is None
+                or not (s.sustainability_probabilities and 'certifications' in s.sustainability_probabilities)
+            ]
+            if hasattr(evaluator, 'rank_by_discovery') and suppliers
+            else []
+        )
+        sust_task = (
+            asyncio.create_task(score_suppliers_sustainability(
+                client, store, needs_sust, refresh=payload.options.refresh
+            ))
+            if needs_sust
+            else None
+        )
         for start in range(0, len(suppliers), 6):
             batch_suppliers = suppliers[start:start + 6]
-            if discovery_prompt is not None:
-                batch = await evaluator.evaluate_suppliers(
-                    payload.requirements, batch_suppliers, discovery_prompt=discovery_prompt
-                )
-            else:
-                batch = await evaluator.evaluate_suppliers(payload.requirements, batch_suppliers)
+            batch = (
+                await evaluator.evaluate_suppliers(payload.requirements, batch_suppliers, discovery_prompt=discovery_prompt)
+                if discovery_prompt is not None
+                else await evaluator.evaluate_suppliers(payload.requirements, batch_suppliers)
+            )
             evaluation.assessments.extend(batch.assessments)
             evaluation.issues.extend(batch.issues)
             if batch.metrics:
@@ -130,6 +146,15 @@ def execute_job(store, job_id, lease_id):
                 supplier_metrics, round(time.monotonic() - eval_started, 2), discovery_ranking=discovery_ranking
             )
             await checkpoint(combined(), 'evaluation')
+        if sust_task is not None:
+            sust_scored = await sust_task
+            for target, scored in zip(needs_sust, sust_scored):
+                target.sustainability_rating = scored.sustainability_rating
+                target.sustainability_score = scored.sustainability_score
+                target.sustainability_confidence = scored.sustainability_confidence
+                target.sustainability_probabilities = scored.sustainability_probabilities
+                target.sustainability_evidence = scored.sustainability_evidence
+                target.sustainability_note = scored.sustainability_note
         if discovery_prompt is not None:
             suppliers = assign_fit_ranks(suppliers)
             discovery.suppliers = suppliers

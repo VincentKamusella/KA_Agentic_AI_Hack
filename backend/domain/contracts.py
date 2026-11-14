@@ -68,6 +68,13 @@ class SupplierEvidence(Contract):
     fit_result: Literal["pass", "fail", "unknown"] | None = None
     fit_confidence: float | None = Field(default=None, ge=0, le=1)
     fit_probabilities: dict[str, float] | None = None
+    # Traffic-light sustainability rating scored by the decision model from internet data.
+    sustainability_rating: Literal["bad", "ok", "good"] | None = None
+    sustainability_score: float | None = Field(default=None, ge=0, le=100)
+    sustainability_confidence: float | None = Field(default=None, ge=0, le=1)
+    sustainability_probabilities: dict[str, float] | None = None
+    sustainability_evidence: list[Evidence] = Field(default_factory=list)
+    sustainability_note: str | None = None
 
 
 class EvidenceDecision(Contract):

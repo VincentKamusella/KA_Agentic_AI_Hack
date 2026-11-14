@@ -18,33 +18,41 @@
     </div>
   </div>
 
-  <figure class="hero-figure">
-    <!-- Decoration: the delivery-radius circles from the map picker. -->
-    <svg class="hero-rings" viewBox="0 0 600 600" aria-hidden="true">
-      <circle cx="300" cy="300" r="110"/><circle cx="300" cy="300" r="190"/><circle cx="300" cy="300" r="270"/>
-      <path d="M300 30v540M30 300h540"/>
-      <circle class="hero-dot" cx="300" cy="300" r="5"/>
-    </svg>
-    <div class="example" role="img" aria-label="Illustrative example of a QuotePilot comparison: three fictional suppliers rated pass, fail or unknown against four requirements. Supplier A is eligible and ranked first, Supplier B needs verification, Supplier C is not eligible.">
-      <div class="example-head"><span>Comparison</span><span class="example-tag">Illustrative example</span></div>
-      <ol class="example-reqs" aria-hidden="true">
-        <li><span>1</span>Food-grade aluminium containers, 750 ml</li>
-        <li><span>2</span>Can fulfil an order of 5,000 pieces</li>
-        <li><span>3</span>Can deliver to Germany</li>
-        <li><span>4</span>Recyclable packaging <em>nice to have</em></li>
-      </ol>
-      <table class="example-table" aria-hidden="true">
-        <thead><tr><th></th><th>Supplier</th><th>Eligibility</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead>
-        <tbody>
-          <tr><td><span class="rank-n">1</span></td><th>Supplier A</th><td><span class="chip chip-pass"><svg class="icon"><use href="#l-check"/></svg>Eligible</span></td>
-            <td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td></tr>
-          <tr><td></td><th>Supplier B</th><td><span class="chip chip-unknown"><svg class="icon"><use href="#l-unknown"/></svg>Needs verification</span></td>
-            <td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-unknown"><svg class="icon"><use href="#l-unknown"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-unknown"><svg class="icon"><use href="#l-unknown"/></svg></span></td></tr>
-          <tr><td></td><th>Supplier C</th><td><span class="chip chip-fail"><svg class="icon"><use href="#l-cross"/></svg>Not eligible</span></td>
-            <td><span class="cell cell-fail"><svg class="icon"><use href="#l-cross"/></svg></span></td><td><span class="cell cell-unknown"><svg class="icon"><use href="#l-unknown"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td><td><span class="cell cell-pass"><svg class="icon"><use href="#l-check"/></svg></span></td></tr>
-        </tbody>
-      </table>
-      <p class="example-quote" aria-hidden="true"><span>Source passage behind a result</span>“We produce food-grade aluminium containers from 250 ml to 1 l …”</p>
+  <figure class="hero-figure supply-figure">
+    <div class="supply-map" role="img" aria-label="Illustration of supply moving between locations around the world, with animated routes connecting suppliers across continents.">
+      <div class="supply-map-head"><span class="supply-live-dot"></span><span>SUPPLY NETWORK</span><span class="supply-map-caption">Worldwide connections</span></div>
+      <svg class="world-map" viewBox="0 0 720 420" aria-hidden="true" focusable="false">
+        <defs>
+          <pattern id="map-grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" class="map-grid-line"/></pattern>
+        </defs>
+        <rect class="map-grid-bg" x="0" y="0" width="720" height="420" rx="12"/>
+        <g class="map-graticule"><path d="M20 210h680M360 18v384M54 105h612M54 315h612M180 25v370M540 25v370"/></g>
+        <g class="map-land">
+          <path d="m71 93 20-24 42-16 31 7 18 19 33 7 19 21-8 19 18 18-9 18-28 7-13 24-22 8-9 27-19 15-11 29-18 7-8-21-18-16-7-30-22-14-9-31-25-20-8-32 12-25-12-21z"/>
+          <path d="m224 234 23 8 15 21-2 22 17 23-8 29-13 13-5 37-15 17-11-30-3-32-13-20 6-31-15-23 4-24z"/>
+          <path d="m319 102 20-17 24 5 8 17-14 13-23-3z"/>
+          <path d="m339 151 18-26 25-8 13 13 21-4 12 19-9 25-21 6-11 27-21 9-10 28-16 23-12-18 5-29-12-19 6-25-13-20z"/>
+          <path d="m383 87 23-21 42-9 28 11 30-3 36 16 41 3 34 20-5 18-32 7-18 19-25-3-22 13-27-7-17 18-28-8-16-23-26 3-11-17-26 1-14-18z"/>
+          <path d="m574 280 25-10 27 7 15 19-10 20-24 9-27-10-12-18z"/>
+          <path d="m653 330 9-5 8 8-7 11-10-3z"/>
+        </g>
+        <g class="route-lines">
+          <path id="route-west" d="M147 153 Q276 43 375 151"/>
+          <path id="route-south" d="M369 158 Q415 240 475 174"/>
+          <path id="route-east" d="M478 169 Q563 87 618 177"/>
+          <path id="route-cross" d="M246 264 Q393 335 579 293"/>
+        </g>
+        <g class="map-stops">
+          <circle cx="147" cy="153" r="4"/><circle cx="375" cy="151" r="4"/><circle cx="475" cy="174" r="4"/><circle cx="618" cy="177" r="4"/><circle cx="246" cy="264" r="4"/><circle cx="579" cy="293" r="4"/>
+        </g>
+        <g class="route-pulses">
+          <circle r="4"><animateMotion dur="4.8s" repeatCount="indefinite"><mpath href="#route-west"/></animateMotion></circle>
+          <circle r="3.5"><animateMotion dur="4s" begin="-1.4s" repeatCount="indefinite"><mpath href="#route-south"/></animateMotion></circle>
+          <circle r="4"><animateMotion dur="5.2s" begin="-2.7s" repeatCount="indefinite"><mpath href="#route-east"/></animateMotion></circle>
+          <circle r="3.5"><animateMotion dur="6.1s" begin="-3.2s" repeatCount="indefinite"><mpath href="#route-cross"/></animateMotion></circle>
+        </g>
+      </svg>
+      <div class="supply-map-foot"><span><i class="map-legend-dot"></i>Supplier locations</span><span><i class="map-legend-route"></i>Supply routes</span></div>
     </div>
   </figure>
 </section>

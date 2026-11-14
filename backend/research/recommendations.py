@@ -175,6 +175,11 @@ class GeminiRecommendationAgent:
             'candidates': [{
                 'supplier_id': a.supplier_id, 'name': suppliers[a.supplier_id].name,
                 'website': str(suppliers[a.supplier_id].website),
+                **({'sustainability': {
+                    'rating': suppliers[a.supplier_id].sustainability_rating,
+                    'score': suppliers[a.supplier_id].sustainability_score,
+                    'note': suppliers[a.supplier_id].sustainability_note,
+                }} if suppliers[a.supplier_id].sustainability_rating else {}),
                 'assessment': a.model_dump(mode='json', exclude={'criteria': {'__all__': {'decisions'}}}),
                 'evidence': [e.model_dump(mode='json') for e in evidence[a.supplier_id]],
             } for a in candidates],
