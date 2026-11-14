@@ -11,8 +11,8 @@ class StageRequest(Contract):
 
     @model_validator(mode="after")
     def bounded_work(self):
-        if not 1 <= len(self.requirements.criteria) <= 12:
-            raise ValueError("Provide between 1 and 12 criteria.")
+        if len(self.requirements.criteria) > 12:
+            raise ValueError("Provide at most 12 criteria.")
         if any(len(c.description) > 1000 for c in self.requirements.criteria):
             raise ValueError("Criterion descriptions must be at most 1,000 characters.")
         if any(c.weight > 100 for c in self.requirements.criteria):

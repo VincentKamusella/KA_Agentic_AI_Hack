@@ -1,5 +1,6 @@
 """HTTP requests enqueue backend work and retrieve saved results."""
 import json
+from pydantic import ValidationError
 
 from django.core.exceptions import RequestDataTooBig
 from django.http import JsonResponse
@@ -33,6 +34,11 @@ def start_research(request):
         payload = StageRequest.model_validate(json.loads(request.body))
         job_id = start_job(ResearchStore(), payload)
         return JsonResponse({"job_id": job_id, "status": "queued"}, status=202)
+    except ValidationError as exc:
+        return JsonResponse({"error": "Check your purchase details.", "fields": [
+            {"path": '.'.join(str(part) for part in error['loc']), "message": error['msg']}
+            for error in exc.errors(include_input=False, include_context=False, include_url=False)
+        ]}, status=400)
     except ValueError:
         # Validation errors can contain submitted data; return only our stable message.
         return JsonResponse({"error": "Invalid request. Evaluation requires a completed discovery job with suppliers; submit its discovery_job_id, not evidence."}, status=400)

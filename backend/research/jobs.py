@@ -24,8 +24,10 @@ def start_job(store, payload, stage='research'):
         raise ValueError('Unknown research stage.')
     if stage == 'evaluate' or payload.discovery_job_id:
         discovery_suppliers(store, payload.discovery_job_id)
-        original = store.get(payload.discovery_job_id)['request']['requirements']
-        if any(original[key] != getattr(payload.requirements, key) for key in ('product', 'quantity', 'delivery_country')):
+        from backend.domain.contracts import Requirements
+        original = Requirements.model_validate(store.get(payload.discovery_job_id)['request']['requirements'])
+        if any(getattr(original, key) != getattr(payload.requirements, key)
+               for key in ('product', 'quantity', 'quantity_unit', 'delivery_country', 'needed_by', 'other_requirements')):
             raise ValueError('Changed purchase briefs require fresh research.')
     return store.create(payload.model_dump(mode='json') | {'stage': stage})
 
@@ -37,13 +39,22 @@ def execute_job(store, job_id, lease_id):
     from backend.integrations.gemini import GeminiClient, GeminiError
     from backend.research.pipeline import shortlist
 
+    interpreted = None
+
     async def checkpoint(result, phase):
         data = result.model_dump(mode='json') if hasattr(result, 'model_dump') else result
-        await asyncio.to_thread(store.update, job_id, lease_id=lease_id, result={**data, 'phase': phase})
+        await asyncio.to_thread(store.update, job_id, lease_id=lease_id, result={**data, 'phase': phase,
+            'requirements': interpreted.model_dump(mode='json') if interpreted else None})
 
     async def execute(request, client):
+        nonlocal interpreted
+        from backend.research.brief import interpret_requirements
         stage = request['stage']
         payload = StageRequest.model_validate({k: v for k, v in request.items() if k not in ('stage', 'suppliers')})
+        await checkpoint({}, 'interpreting')
+        interpreted = await interpret_requirements(payload.requirements, client)
+        payload.requirements = interpreted
+        await checkpoint({}, 'interpreting')
         if payload.discovery_job_id:
             suppliers = await asyncio.to_thread(discovery_suppliers, store, payload.discovery_job_id)
             source = await asyncio.to_thread(store.get, payload.discovery_job_id)
@@ -57,12 +68,13 @@ def execute_job(store, job_id, lease_id):
                 payload.requirements, options=payload.options)
             suppliers = discovery.suppliers
         if stage == 'discover':  # Compatibility for already queued jobs only.
-            return discovery.model_dump(mode='json')
+            return {**discovery.model_dump(mode='json'), 'requirements': interpreted.model_dump(mode='json')}
         evaluator = GeminiEvaluator(client)
         evaluation = EvaluationResult()
 
         def combined():
             return {**shortlist(suppliers, evaluation, discovery.issues).model_dump(mode='json'),
+                    'requirements': interpreted.model_dump(mode='json'),
                     'coverage': discovery.coverage.model_dump(mode='json'),
                     'deferred_suppliers': [s.model_dump(mode='json') for s in discovery.deferred_suppliers]}
 
