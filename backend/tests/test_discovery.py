@@ -147,6 +147,34 @@ class CitationVolumeTests(unittest.TestCase):
 
 
 class ParallelSearchTests(StoreCase):
+    def test_rolling_pool_refills_before_slow_search_finishes(self):
+        async def exercise():
+            release = asyncio.Event()
+            observed = []
+
+            class Service(GeminiDiscovery):
+                calls = 0
+                async def search_query(self, spec, req, options, known, directories):
+                    from backend.domain.contracts import QueryCoverage
+                    self.calls += 1
+                    number = self.calls
+                    if number == 1:
+                        await release.wait()
+                    elif number == 3:
+                        observed.extend(known)
+                        release.set()
+                    supplier = SupplierEvidence(supplier_id=str(number), name=str(number),
+                                                website=f'https://maker{number}.test')
+                    return QueryCoverage(query=spec[0], country=spec[1], language=spec[2], source_type=spec[3]), [supplier], [], []
+
+            service = Service(None, store=self.store, crawler=FakeCrawler())
+            result = await asyncio.wait_for(service.discover_suppliers(requirements(),
+                options=DiscoveryOptions(max_queries=3, search_concurrency=2)), timeout=2)
+            self.assertIn('maker2.test', observed)
+            self.assertEqual(len(result.coverage.queries), 3)
+
+        asyncio.run(exercise())
+
     def test_transport_errors_retry_once_and_tls_errors_do_not(self):
         from unittest.mock import AsyncMock
         for kind, expected in [('timeout', 2), ('connection', 2), ('tls', 1)]:

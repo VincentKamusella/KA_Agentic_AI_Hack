@@ -110,37 +110,53 @@ class GeminiDiscovery:
         )
         concurrency = options.search_concurrency or min(3, len(plan))
         await self.report_progress(result)
-        for offset in range(0, len(plan), concurrency):
-            # A batch shares a snapshot. Full concurrency launches all planned
-            # passes; a smaller limit permits adaptive follow-up batches.
-            tasks = [self.search_query(spec, requirements, options, sorted(groups), coverage.directory_urls[:])
-                     for spec in plan[offset:offset + concurrency]]
-            for completed in asyncio.as_completed(tasks):
-                metric, candidates, directories, issues = await completed
-                coverage.queries.append(metric)
-                result.issues.extend(issues)
-                coverage.directory_urls = list(dict.fromkeys(coverage.directory_urls + directories))
-                for candidate in candidates:
-                    host = urlsplit(str(candidate.website)).hostname
-                    if host in groups:
-                        existing = groups[host]
-                        existing.source_urls = list(dict.fromkeys(existing.source_urls + candidate.source_urls))[:20]
-                        existing.discovered_by = list(dict.fromkeys(existing.discovered_by + [metric.query]))
-                        metric.duplicate_suppliers += 1
-                    else:
-                        groups[host] = candidate
-                        metric.new_suppliers += 1
-                stagnant = stagnant + 1 if not metric.failed and metric.new_suppliers == 0 else 0
-                coverage.candidates_found = len(groups)
-                coverage.pending = len(groups)
-                result.suppliers = list(groups.values())[:options.max_suppliers]
-                result.deferred_suppliers = list(groups.values())[options.max_suppliers:]
-                await self.report_progress(result)
-            if offset + concurrency < len(plan) and len(coverage.queries) >= 4 and stagnant >= options.saturation_queries:
-                coverage.stop_reason = "diminishing_returns"
-                break
-        else:
-            coverage.stop_reason = "query_budget"
+        pending = set()
+        next_query = 0
+        stopped = False
+
+        def fill_slots():
+            nonlocal next_query
+            while not stopped and len(pending) < concurrency and next_query < len(plan):
+                spec = plan[next_query]
+                next_query += 1
+                pending.add(asyncio.create_task(self.search_query(
+                    spec, requirements, options, sorted(groups), coverage.directory_urls[:])))
+
+        fill_slots()
+        try:
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for completed in done:
+                    metric, candidates, directories, issues = completed.result()
+                    coverage.queries.append(metric)
+                    result.issues.extend(issues)
+                    coverage.directory_urls = list(dict.fromkeys(coverage.directory_urls + directories))
+                    for candidate in candidates:
+                        host = urlsplit(str(candidate.website)).hostname
+                        if host in groups:
+                            existing = groups[host]
+                            existing.source_urls = list(dict.fromkeys(existing.source_urls + candidate.source_urls))[:20]
+                            existing.discovered_by = list(dict.fromkeys(existing.discovered_by + [metric.query]))
+                            metric.duplicate_suppliers += 1
+                        else:
+                            groups[host] = candidate
+                            metric.new_suppliers += 1
+                    stagnant = stagnant + 1 if not metric.failed and metric.new_suppliers == 0 else 0
+                    coverage.candidates_found = len(groups)
+                    coverage.pending = len(groups)
+                    result.suppliers = list(groups.values())[:options.max_suppliers]
+                    result.deferred_suppliers = list(groups.values())[options.max_suppliers:]
+                    await self.report_progress(result)
+                    if (next_query < len(plan) and len(coverage.queries) >= 4
+                            and stagnant >= options.saturation_queries):
+                        stopped = True
+                # Refill from the latest findings without waiting for slower searches.
+                fill_slots()
+        finally:
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+        coverage.stop_reason = 'diminishing_returns' if stopped else 'query_budget'
         # Select after collecting the pool, rather than keeping the first search's hits.
         ranked = sorted(groups.values(), key=lambda s: (-len(s.discovered_by), s.supplier_id))
         result.suppliers = ranked[:options.max_suppliers]

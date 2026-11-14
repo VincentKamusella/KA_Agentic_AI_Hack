@@ -561,6 +561,18 @@ function render() {
   renderNotes();
   renderCoverage();
   renderSources();
+  if (busy()) {
+    for (const id of [
+      "requirements-block",
+      "results-content",
+      "contact-recommendations",
+      "decision-performance",
+      "notes-block",
+      "coverage",
+    ]) {
+      $(id).hidden = true;
+    }
+  }
 }
 
 /* Without a step bar, this note links the brief to the research it started. */
@@ -626,18 +638,6 @@ function renderSummary() {
   }
 }
 
-function progressDetail() {
-  const { coverage } = state.result || {};
-  const phase = state.result?.phase;
-  if (phase === "recommendation")
-    return `${plural(assessmentsOf().length, "supplier", "suppliers")} assessed. Your grades are available below.`;
-  if (phase === "evaluation" && suppliersOf().length)
-    return `${assessmentsOf().length} of ${plural(suppliersOf().length, "supplier", "suppliers")} assessed.`;
-  if (coverage?.queries)
-    return `${plural(coverage.queries.length, "search pass", "search passes")} · ${coverage.candidates_found ?? 0} candidates found · ${coverage.researched ?? 0} researched.`;
-  return "";
-}
-
 function renderResultsState() {
   const box = $("results-state");
   box.replaceChildren();
@@ -673,18 +673,23 @@ function renderResultsState() {
           ? state.result.phase
           : "interpreting"
         : "queued";
-    return box.append(
-      panel({
-        working: true,
-        title: PHASES[phase][0],
-        text: PHASES[phase][1],
-        detail: progressDetail(),
-        extra: phase === "queued" ? null : runSteps(phase),
-        actions: suppliersOf().length
-          ? [linkButton("sources", "View suppliers found so far")]
-          : [],
-      }),
-    );
+    const crawling =
+      phase === "discovery" &&
+      ["query_budget", "diminishing_returns"].includes(
+        state.result?.coverage?.stop_reason,
+      );
+    const loading = panel({
+      working: true,
+      title: crawling ? "Reading supplier websites" : PHASES[phase][0],
+      text: crawling
+        ? "Gathering the evidence for your shortlist."
+        : PHASES[phase][1],
+      actions: suppliersOf().length
+        ? [linkButton("sources", "View suppliers found so far")]
+        : [],
+    });
+    loading.classList.add("research-loading");
+    return box.append(loading);
   }
   if (state.status === "failed")
     return box.append(
@@ -1745,45 +1750,6 @@ function decisionAnswers(decisions, evidence) {
               : `Ignored: below the ${percent(DECISION_THRESHOLD)} confidence threshold.`
         }${probabilities}`,
       });
-    }),
-  );
-}
-
-/* The job's real phases as a step list; nothing here is simulated. */
-function runSteps(phase) {
-  const reached = [
-    "interpreting",
-    "discovery",
-    "evaluation",
-    "recommendation",
-  ].indexOf(phase);
-  const steps = [
-    ["Understand your requirements", 0, null],
-    ["Search public sources", 1, "search"],
-    ["Retrieve supplier pages and group passages", 1, "code"],
-    ["Assess every requirement against every excerpt", 2, "decision"],
-    ["Apply must-haves and rank", 2, "rules"],
-    ["Recommend contacts and draft emails", 3, "recommendation"],
-  ];
-  return h(
-    "ol",
-    { class: "run-steps", "aria-label": "Research steps" },
-    steps.map(([label, at, source]) => {
-      const status =
-        at < reached ? "done" : at === reached ? "running" : "waiting";
-      return h(
-        "li",
-        { class: "run-step", "data-status": status },
-        h("span", { class: "run-marker", "aria-hidden": "true" }),
-        h("strong", { text: label }),
-        source ? sourceTag(source) : null,
-        h("span", {
-          class: "run-state",
-          text: { done: "Done", running: "Running", waiting: "Waiting" }[
-            status
-          ],
-        }),
-      );
     }),
   );
 }

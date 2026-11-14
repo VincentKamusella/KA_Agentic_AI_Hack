@@ -34,7 +34,7 @@ Below 720px the sidebar becomes a row with the hamburger and brand whose menu op
 
 ## Live runs and provenance
 
-While a job runs, the progress panel lists the research steps with their real status, taken from the job's phase; nothing is simulated, and blue appears only on the step that is running. The decision-model panel fills in as evaluation checkpoints arrive: calls, latency, counted and ignored answers, the prompts and rubric that were used, and one requirement × excerpt matrix per supplier.
+While a job runs, a spacious loading panel shows one current activity, elapsed time, and an optional link to sources. Search and website retrieval have distinct messages. The technical step checklist and detailed result sections stay hidden until the run ends; source evidence remains accessible. Nothing is simulated. The decision-model panel fills in as evaluation checkpoints arrive: calls, latency, counted and ignored answers, the prompts and rubric that were used, and one requirement × excerpt matrix per supplier.
 
 Every model-derived value carries a `sourceTag()`: the solid, inverted **Decision model** chip is reserved for `gemini-decision-1` output; **Search model**, **Code**, and **Rules** stay outlined. Show decision confidence next to decision results, and mark answers ignored under the threshold with dashed, struck-through chips. Suppliers show their discovery fit rank and listed price where the backend provides them, and Sources is ordered by fit. "Suggest requirements" in the requirements editor offers model suggestions that the user adds one by one; none is included automatically.
 

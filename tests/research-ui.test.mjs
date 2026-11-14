@@ -373,15 +373,14 @@ test("interpreting checkpoints without requirements or suppliers render progress
       request,
     }),
   );
-  await settle(() => !d.getElementById("requirements-block").hidden);
+  await settle(finished(d));
   const view = d.getElementById("requirements-view");
   assert.match(view.textContent, /Must have/);
   assert.match(view.textContent, /Nice to have/);
   const [must, nice] = view.querySelectorAll(".requirement-group");
   assert.match(must.textContent, /EU manufacturing required/);
   assert.match(nice.textContent, /recyclable packaging preferred/);
-  assert.equal(d.getElementById("adjust").hidden, true);
-  await settle(finished(d));
+  assert.equal(d.getElementById("requirements-block").hidden, false);
   assert.equal(d.getElementById("adjust").hidden, false);
 });
 
@@ -765,7 +764,7 @@ test("suggested requirements are offered in the editor and only added on request
   );
 });
 
-test("the progress panel lists the research steps with their real status", async (t) => {
+test("the loading screen shows only the current activity", async (t) => {
   const dom = setup(
     server([
       {
@@ -778,18 +777,10 @@ test("the progress panel lists the research steps with their real status", async
   );
   t.after(() => dom.window.close());
   const d = dom.window.document;
-  await settle(() => Boolean(d.querySelector(".run-steps")));
-  const status = [...d.querySelectorAll(".run-step")].map(
-    (n) => n.dataset.status,
-  );
-  assert.deepEqual(status, [
-    "done",
-    "running",
-    "running",
-    "waiting",
-    "waiting",
-    "waiting",
-  ]);
+  await settle(() => Boolean(d.querySelector(".research-loading")));
+  assert.match(text(d, "results-state"), /Finding suppliers/);
+  assert.equal(d.querySelector(".run-steps"), null);
+  assert.equal(d.getElementById("requirements-block").hidden, true);
 });
 
 function withRecommendations() {
@@ -871,17 +862,15 @@ test("recommendation phase shows real progress without claiming evaluation is st
   const dom = setup(server([job]), jobId);
   t.after(() => dom.window.close());
   const d = dom.window.document;
-  await settle(() => Boolean(d.querySelector(".run-steps")));
+  await settle(() => Boolean(d.querySelector(".research-loading")));
   assert.match(
     text(d, "results-state"),
     /Preparing recommendations and email drafts/,
   );
   assert.match(text(d, "comparison-progress"), /Grading is complete/);
   assert.equal(d.getElementById("contact-recommendations").hidden, true);
-  assert.deepEqual(
-    [...d.querySelectorAll(".run-step")].map((n) => n.dataset.status),
-    ["done", "done", "done", "done", "done", "running"],
-  );
+  assert.equal(d.getElementById("results-content").hidden, true);
+  assert.equal(d.getElementById("decision-performance").hidden, true);
 });
 
 test("failed recommendation generation keeps grades and retries with saved evidence", async (t) => {

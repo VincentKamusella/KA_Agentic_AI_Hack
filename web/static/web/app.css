@@ -1708,45 +1708,25 @@ h2 {
   align-items: center;
   gap: 6px;
 }
-/* Research steps on the progress panel. Blue marks only what is running. */
-.run-steps {
-  display: grid;
-  gap: 8px;
-  margin: 20px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.run-step {
+/* One current activity, with supporting details kept out of the waiting view. */
+.research-loading {
+  min-height: 320px;
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  color: var(--qp-muted);
-  font-size: 0.875rem;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(24px, 5vw, 64px);
 }
-.run-step strong {
-  font-weight: 500;
+.research-loading h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  max-width: 28ch;
+  line-height: 1.2;
 }
-.run-marker {
-  width: 9px;
-  height: 9px;
-  flex: none;
-  border: 1px solid var(--qp-line-strong);
-  border-radius: 50%;
+.research-loading p {
+  max-width: 52ch;
 }
-.run-step[data-status="done"] .run-marker {
-  border-color: var(--qp-muted);
-  background: var(--qp-muted);
-}
-.run-step[data-status="running"] {
-  color: var(--qp-light);
-}
-.run-step[data-status="running"] .run-marker {
-  border-color: var(--qp-accent-text);
-  background: var(--qp-accent);
-}
-.run-state {
-  font-size: 0.8125rem;
+.research-loading .state-busy {
+  margin-bottom: 24px;
 }
 .editor-actions {
   display: flex;
