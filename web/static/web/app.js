@@ -581,7 +581,11 @@ function render() {
     (evaluation?.assessments || []).map((a) => [a.supplier_id, a]),
   );
   const displaySuppliers = evaluation
-    ? sortSuppliersByEvaluation(suppliers, assessments)
+    ? sortSuppliersByEvaluation(
+        suppliers,
+        assessments,
+        evaluation.recommended_supplier_ids || [],
+      )
     : sortSuppliersByFit(suppliers);
   updateTotals();
   updateViewStates();
@@ -661,7 +665,7 @@ function render() {
     head.append(hr);
     table.append(head);
     const body = el("tbody");
-    for (const s of displaySuppliers) {
+    displaySuppliers.forEach((s, index) => {
       const a = assessments.get(s.supplier_id),
         row = el("tr"),
         name = el("td");
@@ -674,11 +678,11 @@ function render() {
         : fitTier(s);
       if (tier) row.dataset.fit = tier;
       const titleRow = el("div", undefined, "candidate-title");
-      if (s.fit_rank) titleRow.append(el("span", `#${s.fit_rank}`, "rank-pill"));
+      titleRow.append(el("span", `#${index + 1}`, "rank-pill"));
       titleRow.append(el("strong", s.name));
       name.append(titleRow);
       if (chosen.includes(s)) name.append(el("small", "Shortlisted"));
-      const fit = fitLine(s);
+      const fit = fitLine(s, true);
       if (fit) name.append(fit);
       row.append(name);
       const priceCell = el(
@@ -709,7 +713,7 @@ function render() {
       }
       row.append(priceCell, status, matchCell, coverageCell);
       body.append(row);
-    }
+    });
     table.append(body);
     wrap.append(table);
     $("comparison").append(wrap);
@@ -717,11 +721,10 @@ function render() {
   $("sources").append(
     el("h3", "Evidence & assessment details", "source-title"),
   );
-  for (const s of displaySuppliers) {
+  displaySuppliers.forEach((s, index) => {
     const a = assessments.get(s.supplier_id);
-    const title = s.fit_rank
-      ? `#${s.fit_rank} · ${s.name}${s.fit_score != null ? ` (${Math.round(s.fit_score)}/100)` : ""}`
-      : s.name;
+    const rankNum = evaluation ? index + 1 : s.fit_rank || index + 1;
+    const title = `#${rankNum} · ${s.name}${a ? ` (${criteriaBreakdown(a).passed}/${criteriaBreakdown(a).total} passed)` : s.fit_score != null ? ` (${Math.round(s.fit_score)}/100)` : ""}`;
     const panel = accordion(title, "supplier"),
       details = panel.body;
     const tier = a
@@ -733,7 +736,7 @@ function render() {
       : fitTier(s);
     if (tier) panel.root.dataset.fit = tier;
     details.append(priceLine(s));
-    const fit = fitLine(s);
+    const fit = fitLine(s, Boolean(evaluation));
     if (fit) details.append(fit);
     if (s.discovered_by?.length) {
       details.append(
@@ -794,7 +797,7 @@ function render() {
     for (const e of s.evidence) renderEvidence(e, sourcePanel.body);
     details.append(sourcePanel.root);
     $("sources").append(panel.root);
-  }
+  });
   for (const issue of [...discoveryIssues, ...(evaluation?.issues || [])])
     $("sources").append(el("p", issue.message, "alert alert-warning issue"));
 }
@@ -865,22 +868,34 @@ function eligibilityRank(eligibility) {
   if (eligibility === "ineligible") return 2;
   return 3;
 }
-function sortSuppliersByEvaluation(list, assessments) {
+function sortSuppliersByEvaluation(list, assessments, recommendedIds = []) {
+  const shortlistIndex = new Map(recommendedIds.map((id, idx) => [id, idx]));
   return [...list].sort((a, b) => {
+    const sa = shortlistIndex.has(a.supplier_id)
+      ? shortlistIndex.get(a.supplier_id)
+      : Number.MAX_SAFE_INTEGER;
+    const sb = shortlistIndex.has(b.supplier_id)
+      ? shortlistIndex.get(b.supplier_id)
+      : Number.MAX_SAFE_INTEGER;
+    if (sa !== sb) return sa - sb;
     const aa = assessments.get(a.supplier_id),
       ab = assessments.get(b.supplier_id);
     const ea = eligibilityRank(aa?.eligibility),
       eb = eligibilityRank(ab?.eligibility);
     if (ea !== eb) return ea - eb;
     if (aa && ab) {
+      const pa = criteriaBreakdown(aa),
+        pb = criteriaBreakdown(ab);
+      if (pb.passed !== pa.passed) return pb.passed - pa.passed;
       if (ab.preference_score !== aa.preference_score)
         return ab.preference_score - aa.preference_score;
       if (ab.evidence_coverage !== aa.evidence_coverage)
         return ab.evidence_coverage - aa.evidence_coverage;
+      if (pa.failed !== pb.failed) return pa.failed - pb.failed;
     }
     const [ra, ca] = fitRank(a),
       [rb, cb] = fitRank(b);
-    return ra - rb || ca - cb;
+    return ra - rb || ca - cb || a.supplier_id.localeCompare(b.supplier_id);
   });
 }
 function priceLine(supplier) {
@@ -895,7 +910,7 @@ function priceLine(supplier) {
   );
   return line;
 }
-function fitLine(supplier) {
+function fitLine(supplier, evaluated = false) {
   if (!supplier.fit_result && supplier.fit_score == null && !supplier.fit_rank)
     return null;
   const line = el("div", undefined, "fit-line");
@@ -906,7 +921,13 @@ function fitLine(supplier) {
     ),
   );
   if (supplier.fit_rank)
-    line.append(el("span", `Rank #${supplier.fit_rank}`, "rank-pill compact"));
+    line.append(
+      el(
+        "span",
+        evaluated ? `Discovery #${supplier.fit_rank}` : `Rank #${supplier.fit_rank}`,
+        "rank-pill compact",
+      ),
+    );
   if (supplier.fit_score != null)
     line.append(
       el("span", `${Math.round(supplier.fit_score)} / 100 fit`, "fit-score"),
@@ -1656,7 +1677,8 @@ function updateViewStates() {
 }
 function renderCandidates(list = suppliers, assessments = new Map()) {
   $("candidates").replaceChildren();
-  for (const supplier of list) {
+  const hasEval = assessments.size > 0;
+  list.forEach((supplier, index) => {
     const row = el("div", undefined, "candidate-row");
     const a = assessments.get(supplier.supplier_id);
     const tier = a
@@ -1669,8 +1691,8 @@ function renderCandidates(list = suppliers, assessments = new Map()) {
     if (tier) row.dataset.fit = tier;
     const description = el("div");
     const titleRow = el("div", undefined, "candidate-title");
-    if (supplier.fit_rank)
-      titleRow.append(el("span", `#${supplier.fit_rank}`, "rank-pill"));
+    const rankNum = hasEval ? index + 1 : supplier.fit_rank || index + 1;
+    titleRow.append(el("span", `#${rankNum}`, "rank-pill"));
     titleRow.append(el("h3", supplier.name));
     description.append(
       titleRow,
@@ -1680,7 +1702,7 @@ function renderCandidates(list = suppliers, assessments = new Map()) {
       ),
       priceLine(supplier),
     );
-    const fit = fitLine(supplier);
+    const fit = fitLine(supplier, hasEval);
     if (fit) description.append(fit);
     if (a) {
       const stats = criteriaBreakdown(a);
@@ -1705,7 +1727,7 @@ function renderCandidates(list = suppliers, assessments = new Map()) {
     link.href = "#/evidence";
     row.append(description, link);
     $("candidates").append(row);
-  }
+  });
 }
 document
   .querySelectorAll("[data-source-tag]")
