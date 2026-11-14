@@ -561,6 +561,7 @@ function render() {
   renderNotes();
   renderCoverage();
   renderSources();
+  $("research-details").hidden = busy() || state.restoring || !state.result;
   if (busy()) {
     for (const id of [
       "requirements-block",
@@ -1027,7 +1028,6 @@ function renderContactRecommendations() {
       "div",
       { class: "block-head" },
       h("h2", { id: "contact-title", text: "Who to contact" }),
-      sourceTag("recommendation"),
     ),
   );
   if (!report) {
@@ -1058,7 +1058,14 @@ function renderContactRecommendations() {
     );
     return;
   }
-  host.append(h("p", { class: "contact-summary", text: report.summary }));
+  host.append(
+    h(
+      "details",
+      { class: "contact-overview" },
+      h("summary", { text: "Research overview" }),
+      h("p", { class: "contact-summary", text: report.summary }),
+    ),
+  );
   if (report.no_eligible_suppliers)
     host.append(
       h("p", {
@@ -1079,7 +1086,7 @@ function renderContactRecommendations() {
   host.append(
     h("p", {
       class: "help",
-      text: "Suggested contact order. The eligibility grades and shortlist below remain unchanged. Review each draft before copying it into your email; nothing is sent.",
+      text: "Review before sending. Add the recipient in your email app.",
     }),
   );
   const list = h("div", {
@@ -1104,7 +1111,7 @@ function renderContactRecommendations() {
           "span",
           { class: `chip chip-${qualified ? "pass" : "unknown"}` },
           icon(qualified ? "check" : "unknown"),
-          qualified ? "Meets documented requirements" : "Outreach only",
+          qualified ? "Meets documented requirements" : "Check with supplier",
         ),
       ),
     );
@@ -1150,7 +1157,7 @@ function renderContactRecommendations() {
           "details",
           { "data-key": key, open: expanded.has(key) },
           h("summary", {
-            text: `Questions to confirm (${recommendation.verification_questions.length})`,
+            text: `Questions for the supplier (${recommendation.verification_questions.length})`,
           }),
           h(
             "ul",
@@ -1162,6 +1169,26 @@ function renderContactRecommendations() {
         ),
       );
     }
+    const evaluationKey = `${supplier.supplier_id}-evaluation`;
+    const evaluation = h(
+      "details",
+      {
+        class: "contact-evaluation",
+        "data-key": evaluationKey,
+        open: expanded.has(evaluationKey),
+      },
+      h("summary", { text: "Evidence & questions for the supplier" }),
+    );
+    // Keep the qualification visible; put the supporting research one click away.
+    [...article.children].slice(1).forEach((node) => evaluation.append(node));
+    if (recommendation.reasons[0])
+      article.append(
+        h("p", {
+          class: "contact-verdict",
+          text: recommendation.reasons[0].text,
+        }),
+      );
+    article.append(evaluation);
     const key = `${supplier.supplier_id}-email`;
     const id = `contact-email-${index}`;
     const draft = recommendation.email_draft;
@@ -1169,7 +1196,7 @@ function renderContactRecommendations() {
       h(
         "details",
         { class: "contact-email", "data-key": key, open: expanded.has(key) },
-        h("summary", { text: "Review email draft" }),
+        h("summary", { text: "Review & email supplier" }),
         h(
           "div",
           { class: "block-head" },
@@ -1186,11 +1213,16 @@ function renderContactRecommendations() {
             h("span", { text: "Copy draft" }),
           ),
         ),
+        h("a", {
+          class: "btn btn-primary contact-compose",
+          href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,
+          text: "Open in email app",
+        }),
         h("textarea", {
           id,
           class: "form-control",
           readOnly: true,
-          rows: 12,
+          rows: 8,
           value: `Subject: ${draft.subject}\n\n${draft.body}`,
         }),
       ),

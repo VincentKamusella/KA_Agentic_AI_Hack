@@ -2043,3 +2043,41 @@ h2 {
   display: grid;
   gap: 16px;
 }
+
+/* Outreach is the main task; detailed research is available on demand. */
+.research-details {
+  margin-top: 40px;
+  border-top: 1px solid var(--qp-line);
+  padding-top: 20px;
+}
+.research-details > summary {
+  color: var(--qp-muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+.contact-overview {
+  margin: 12px 0;
+  color: var(--qp-muted);
+}
+.contact-overview summary {
+  cursor: pointer;
+}
+.contact-verdict {
+  max-width: 65ch;
+  margin: 20px 0;
+}
+.contact-email > summary {
+  display: list-item;
+  width: fit-content;
+  padding: 12px 18px;
+  border: 1px solid var(--qp-accent);
+  border-radius: 8px;
+  color: var(--qp-light);
+  background: var(--qp-accent);
+}
+.contact-compose {
+  margin: 12px 0 16px;
+}
+.contact-evaluation > summary {
+  color: var(--qp-muted);
+}

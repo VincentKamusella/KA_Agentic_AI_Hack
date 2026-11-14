@@ -828,13 +828,18 @@ test("saved recommendations show contact priority, qualification, citations and 
   assert.match(section.textContent, /1\. Example Alpha/);
   assert.match(section.textContent, /2\. Example Gamma/);
   assert.match(section.textContent, /Meets documented requirements/);
-  assert.match(section.textContent, /Outreach only/);
+  assert.match(section.textContent, /Check with supplier/);
   assert.match(section.textContent, /Can you fulfil 2.5 pallets/);
   assert.equal(
     section.querySelector(".contact-citations a").href,
     "https://alpha.example/about",
   );
-  assert.ok(section.querySelector(".src-recommendation"));
+  assert.equal(d.getElementById("research-details").open, false);
+  const compose = section.querySelector(".contact-compose");
+  const mail = new URL(compose.href);
+  assert.equal(mail.protocol, "mailto:");
+  assert.equal(mail.searchParams.get("subject"), "Quotation request for alpha");
+  assert.match(mail.searchParams.get("body"), /Please quote/);
   assert.equal(section.querySelector(".src-decision"), null);
   let copied;
   Object.defineProperty(dom.window.navigator, "clipboard", {

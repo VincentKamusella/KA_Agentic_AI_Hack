@@ -49,3 +49,5 @@ The submitted form is kept, locked, while a job runs, and kept on every error. V
 Copy states only what the code does.
 
 Supplier recommendations use a deck: one complete card is visible at a time, with layered edges, a position count, and Previous/Next buttons. A View full list / Back to card stack toggle switches layouts without losing the selected card. Contact priority order is preserved; evidence and email drafts stay inside each card.
+
+The results page prioritizes reviewing supplier cards and opening quotation drafts in an email app. Detailed comparisons, requirements, grading metrics and research notes live in a collapsed Research details section. Each card keeps its qualification and leading reason visible, with evidence and questions on demand. Email drafts can be opened via mailto or copied; recipients are entered in the email app, and the app itself does not send messages.
