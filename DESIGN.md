@@ -59,3 +59,5 @@ Recommendation cards show evidence by default in two groups: Why consider this s
 Research details is no longer exposed on the results page. Supplier recommendation cards are the results interface; legacy grading/editor DOM remains hidden and inert for compatibility.
 
 Supplier cards expose only Open in email app for outreach. Inline draft previews and their copy control have been removed; the full subject and message are passed to the email app.
+
+The deck uses Previous/Next only; the full-list option is removed. Directional 440ms card transitions reverse for Previous, with instant switching for reduced motion.

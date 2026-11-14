@@ -1178,7 +1178,6 @@ function renderContactRecommendations() {
   if (host.dataset.deckJob !== state.jobId) {
     host.dataset.deckJob = state.jobId;
     host.dataset.deckIndex = "0";
-    host.dataset.deckMode = "stack";
   }
   let current = Math.min(Number(host.dataset.deckIndex) || 0, cards.length - 1);
   const position = h("span", {
@@ -1198,49 +1197,80 @@ function renderContactRecommendations() {
     text: "Next",
     "aria-label": "Next recommendation",
   });
-  let fullList = host.dataset.deckMode === "list";
-  const toggle = h("button", {
-    type: "button",
-    class: "btn btn-outline-secondary",
-  });
   const show = () => {
     cards.forEach((card, index) => {
-      card.hidden = !fullList && index !== current;
+      card.hidden = index !== current;
     });
-    host.dataset.deckMode = fullList ? "list" : "stack";
-    list.classList.toggle("has-stack", !fullList && cards.length > 1);
-    list.classList.toggle("is-full-list", fullList);
-    previous.hidden = next.hidden = fullList;
-    toggle.textContent = fullList ? "Back to card stack" : "View full list";
+    list.classList.toggle("has-stack", cards.length > 1);
     host.dataset.deckIndex = String(current);
-    position.textContent = fullList
-      ? `${cards.length} recommendations`
-      : `${current + 1} of ${cards.length} recommendations`;
+    position.textContent = `${current + 1} of ${cards.length} recommendations`;
     previous.disabled = current === 0;
     next.disabled = current === cards.length - 1;
   };
-  previous.addEventListener("click", () => {
-    current--;
+  let transitioning = false;
+  const turnCard = (direction) => {
+    if (
+      transitioning ||
+      current + direction < 0 ||
+      current + direction >= cards.length
+    )
+      return;
+    const outgoing = cards[current];
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const animate = !reducedMotion && typeof outgoing.animate === "function";
+    const ghost = animate ? outgoing.cloneNode(true) : null;
+    current += direction;
     show();
-  });
-  next.addEventListener("click", () => {
-    current++;
-    show();
-  });
-  toggle.addEventListener("click", () => {
-    fullList = !fullList;
-    show();
-  });
+    if (!ghost) return;
+    transitioning = true;
+    previous.disabled = next.disabled = true;
+    ghost.removeAttribute("id");
+    ghost
+      .querySelectorAll("[id]")
+      .forEach((node) => node.removeAttribute("id"));
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.setAttribute("inert", "");
+    ghost.classList.add("contact-turn-ghost");
+    list.append(ghost);
+    list.classList.add("is-turning");
+    const timing = { duration: 440, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+    const exit = ghost.animate(
+      [
+        { transform: "translateX(0) rotate(0deg)", opacity: 1 },
+        {
+          transform: `translateX(${-direction * 48}px) rotate(${-direction * 3}deg) scale(0.96)`,
+          opacity: 0,
+        },
+      ],
+      { ...timing, fill: "forwards" },
+    );
+    const entry = cards[current].animate(
+      [
+        {
+          transform: `translateX(${direction * 40}px) translateY(14px) rotate(${direction * 2}deg) scale(0.96)`,
+          opacity: 0,
+        },
+        {
+          transform: "translateX(0) translateY(0) rotate(0deg) scale(1)",
+          opacity: 1,
+        },
+      ],
+      timing,
+    );
+    Promise.allSettled([exit.finished, entry.finished]).then(() => {
+      ghost.remove();
+      list.classList.remove("is-turning");
+      transitioning = false;
+      show();
+    });
+  };
+  previous.addEventListener("click", () => turnCard(-1));
+  next.addEventListener("click", () => turnCard(1));
   show();
   host.append(
-    h(
-      "div",
-      { class: "contact-deck-controls" },
-      position,
-      previous,
-      next,
-      toggle,
-    ),
+    h("div", { class: "contact-deck-controls" }, position, previous, next),
     list,
   );
 }

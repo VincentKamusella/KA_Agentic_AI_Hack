@@ -2065,11 +2065,6 @@ h2 {
   }
 }
 
-.contact-list.is-full-list {
-  display: grid;
-  gap: 16px;
-}
-
 /* Outreach is the main task; detailed research is available on demand. */
 .research-details {
   margin-top: 40px;
@@ -2181,4 +2176,19 @@ h2 {
   color: var(--qp-muted);
   font-size: 0.875rem;
   font-weight: 400;
+}
+
+.contact-list.is-turning {
+  overflow: clip;
+}
+.contact-turn-ghost {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.contact-deck-controls .btn {
+  padding: 6px 12px;
+  font-size: 0.875rem;
 }
