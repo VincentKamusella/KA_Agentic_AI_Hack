@@ -1150,25 +1150,6 @@ function renderContactRecommendations() {
           recommendation.tradeoffs.map((text) => h("li", { text })),
         ),
       );
-    if (recommendation.verification_questions.length) {
-      const key = `${supplier.supplier_id}-questions`;
-      article.append(
-        h(
-          "details",
-          { "data-key": key, open: expanded.has(key) },
-          h("summary", {
-            text: `Questions for the supplier (${recommendation.verification_questions.length})`,
-          }),
-          h(
-            "ul",
-            null,
-            recommendation.verification_questions.map((q) =>
-              h("li", { text: q.question }),
-            ),
-          ),
-        ),
-      );
-    }
     const evaluationKey = `${supplier.supplier_id}-evaluation`;
     const evaluation = h(
       "details",
@@ -1177,7 +1158,7 @@ function renderContactRecommendations() {
         "data-key": evaluationKey,
         open: expanded.has(evaluationKey),
       },
-      h("summary", { text: "Evidence & questions for the supplier" }),
+      h("summary", { text: "Evidence & trade-offs" }),
     );
     // Keep the qualification visible; put the supporting research one click away.
     [...article.children].slice(1).forEach((node) => evaluation.append(node));
@@ -1186,6 +1167,13 @@ function renderContactRecommendations() {
         h("p", {
           class: "contact-verdict",
           text: recommendation.reasons[0].text,
+        }),
+      );
+    if (recommendation.verification_questions.length)
+      article.append(
+        h("p", {
+          class: "contact-warning",
+          text: `${plural(recommendation.verification_questions.length, "open question", "open questions")} for the supplier — included in the email draft.`,
         }),
       );
     article.append(evaluation);

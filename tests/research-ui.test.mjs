@@ -829,7 +829,7 @@ test("saved recommendations show contact priority, qualification, citations and 
   assert.match(section.textContent, /2\. Example Gamma/);
   assert.match(section.textContent, /Meets documented requirements/);
   assert.match(section.textContent, /Check with supplier/);
-  assert.match(section.textContent, /Can you fulfil 2.5 pallets/);
+  assert.match(section.textContent, /1 open question for the supplier/);
   assert.equal(
     section.querySelector(".contact-citations a").href,
     "https://alpha.example/about",
