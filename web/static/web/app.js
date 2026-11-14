@@ -679,7 +679,6 @@ function renderResultsState() {
         state.result?.coverage?.stop_reason,
       );
     const loading = panel({
-      working: true,
       title: crawling ? "Reading supplier websites" : PHASES[phase][0],
       text: crawling
         ? "Gathering the evidence for your shortlist."
@@ -689,6 +688,43 @@ function renderResultsState() {
         : [],
     });
     loading.classList.add("research-loading");
+    const candidates = suppliersOf().slice(-3);
+    const previews = h("div", {
+      class: "loading-preview",
+      "aria-hidden": "true",
+      inert: "",
+    });
+    previews.style.setProperty("--preview-delay", `-${Date.now() % 8000}ms`);
+    for (let i = 0; i < 3; i++) {
+      const supplier = candidates[i];
+      previews.append(
+        h(
+          "div",
+          { class: "loading-preview-card" },
+          supplier
+            ? h("strong", { text: supplier.name })
+            : h("span", { class: "preview-skeleton preview-name" }),
+          supplier
+            ? h("span", { text: supplier.website })
+            : h("span", { class: "preview-skeleton preview-url" }),
+          h("span", { class: "preview-skeleton preview-line" }),
+          h("span", { class: "preview-skeleton preview-line-short" }),
+        ),
+      );
+    }
+    const copy = h("div", { class: "loading-copy" }, ...loading.childNodes);
+    const count =
+      state.result?.coverage?.candidates_found ?? suppliersOf().length;
+    if (count)
+      copy.append(
+        h("p", {
+          class: "loading-count",
+          text: `${plural(count, "supplier", "suppliers")} discovered · Not yet a final shortlist`,
+        }),
+      );
+    if (state.startedAt)
+      copy.append(h("span", { class: "elapsed", text: elapsedText() }));
+    loading.append(previews, copy);
     return box.append(loading);
   }
   if (state.status === "failed")

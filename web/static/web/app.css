@@ -1708,14 +1708,23 @@ h2 {
   align-items: center;
   gap: 6px;
 }
-/* One current activity, with supporting details kept out of the waiting view. */
+/* Real candidates stay obscured until the finished shortlist is ready. */
 .research-loading {
-  min-height: 320px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
+  position: relative;
+  min-height: 440px;
+  overflow: hidden;
+  isolation: isolate;
   padding: clamp(24px, 5vw, 64px);
+  display: flex;
+  align-items: center;
+}
+.loading-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 38rem;
+  padding: 24px;
+  background: rgba(7, 9, 13, 0.88);
+  border-radius: 16px;
 }
 .research-loading h2 {
   font-size: clamp(1.5rem, 3vw, 2rem);
@@ -1725,8 +1734,100 @@ h2 {
 .research-loading p {
   max-width: 52ch;
 }
-.research-loading .state-busy {
-  margin-bottom: 24px;
+.research-loading .loading-count {
+  margin: 20px 0 8px;
+  font-size: 0.875rem;
+}
+.loading-preview {
+  position: absolute;
+  inset: 24px 4% 24px 30%;
+  pointer-events: none;
+  user-select: none;
+  filter: blur(7px);
+  opacity: 0.65;
+  animation: preview-drift 8s ease-in-out infinite;
+  animation-delay: var(--preview-delay);
+}
+.loading-preview-card {
+  position: absolute;
+  width: 85%;
+  height: 178px;
+  padding: 24px;
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 16px;
+  background: var(--qp-solid);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+.loading-preview-card:nth-child(1) {
+  top: 0;
+  left: 0;
+  transform: rotate(-7deg);
+}
+.loading-preview-card:nth-child(2) {
+  top: 98px;
+  left: 10%;
+  transform: rotate(4deg);
+}
+.loading-preview-card:nth-child(3) {
+  top: 196px;
+  left: 2%;
+  transform: rotate(-3deg);
+}
+.loading-preview-card strong {
+  font-size: 1.25rem;
+}
+.loading-preview-card > span:not(.preview-skeleton) {
+  white-space: nowrap;
+}
+.preview-skeleton {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--qp-line-strong);
+}
+.preview-name {
+  width: 55%;
+  height: 20px;
+}
+.preview-url {
+  width: 72%;
+}
+.preview-line {
+  width: 90%;
+  margin-top: 8px;
+}
+.preview-line-short {
+  width: 60%;
+}
+@keyframes preview-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+@media (max-width: 720px) {
+  .research-loading {
+    padding: 120px 16px 24px;
+    min-height: 480px;
+    align-items: flex-end;
+  }
+  .loading-copy {
+    padding: 20px;
+  }
+  .loading-preview {
+    inset: 24px 8% 24px 8%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-preview {
+    animation: none;
+  }
 }
 .editor-actions {
   display: flex;
