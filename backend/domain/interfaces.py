@@ -1,6 +1,6 @@
 """Structural interfaces: implementations need not inherit from these protocols."""
 
-from typing import Protocol
+from typing import Callable, Protocol
 
 from backend.domain.contracts import (
     DiscoveryOptions,
@@ -17,7 +17,8 @@ class SupplierDiscovery(Protocol):
     """Person 1: search, crawl, deduplicate, and collect source evidence."""
 
     async def discover_suppliers(
-        self, requirements: Requirements, *, options: DiscoveryOptions
+        self, requirements: Requirements, *, options: DiscoveryOptions,
+        progress: Callable[[dict], None] | None = None,
     ) -> DiscoveryResult:
         """Return partial successes and issues; never invent missing facts.
 
@@ -34,7 +35,8 @@ class SupplierEvaluator(Protocol):
     """Person 2: Gemini decisions, criterion assessment, and ranking scores."""
 
     async def evaluate_suppliers(
-        self, requirements: Requirements, suppliers: list[SupplierEvidence]
+        self, requirements: Requirements, suppliers: list[SupplierEvidence], *,
+        progress: Callable[[dict], None] | None = None,
     ) -> EvaluationResult:
         """Assess each supplier or return a supplier-specific evaluation issue.
 

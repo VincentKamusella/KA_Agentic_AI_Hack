@@ -119,6 +119,159 @@ class EvaluationTests(unittest.TestCase):
         broken['steps'][0]['content'][0]['annotations'].pop()
         self.assertFalse(extract_candidates(broken, "bolts")[0])
 
+    def test_progress_events_and_raw_decisions_are_reported(self):
+        events = []
+        result = asyncio.run(GeminiEvaluator(FakeClient({'c0_e0': 'fail'}, confidence=.9)).evaluate_suppliers(
+            self.requirements, [self.supplier], progress=events.append))
+        self.assertEqual([(e['type'], e['status']) for e in events], [
+            ('step', 'running'), ('supplier', 'queued'), ('supplier', 'running'),
+            ('supplier', 'done'), ('step', 'done')])
+        self.assertTrue(all(e['step'] == 'assess' for e in events))
+        answers = events[3]['answers']
+        self.assertEqual(len(answers), len(self.requirements.criteria) * len(self.supplier.evidence))
+        self.assertEqual(answers[0]['choice'], 'fail')
+        decision = result.assessments[0].criteria[0].decisions[0]
+        self.assertEqual((decision.choice, decision.confidence, decision.counted), ('fail', .9, True))
+        self.assertAlmostEqual(decision.probabilities['fail'], .9)
+        self.assertEqual(result.metrics.calls, 1)
+        self.assertEqual(result.metrics.questions, 2)
+        self.assertEqual((result.metrics.pass_count, result.metrics.fail_count), (1, 1))
+        self.assertEqual((result.metrics.abstained, result.metrics.below_threshold), (0, 0))
+
+    def test_low_confidence_decisions_are_recorded_but_not_counted(self):
+        evaluation = self.run_eval(FakeClient(confidence=.6))
+        criterion = evaluation.assessments[0].criteria[0]
+        self.assertEqual(criterion.result, 'unknown')
+        self.assertFalse(any(d.counted for d in criterion.decisions))
+        self.assertEqual(evaluation.metrics.below_threshold, 2)
+        self.assertEqual(evaluation.metrics.counted, 0)
+
+    def test_shortlist_preserves_decision_metrics_and_tracks_skipped_and_failed(self):
+        from backend.research.pipeline import shortlist
+        empty_supplier = self.supplier.model_copy(update={'supplier_id': 'empty', 'evidence': []})
+
+        class PartialErrorClient(FakeClient):
+            async def post(self, endpoint, payload):
+                if '"supplier_id": "alpha"' in payload['input']:
+                    raise GeminiError('Rate limited')
+                return await super().post(endpoint, payload)
+
+        third = self.supplier.model_copy(update={'supplier_id': 'ok'})
+        evaluation = asyncio.run(GeminiEvaluator(PartialErrorClient({'c0_e0': 'unknown'})).evaluate_suppliers(
+            self.requirements, [self.supplier, empty_supplier, third]))
+        response = shortlist([self.supplier, empty_supplier, third], evaluation)
+        self.assertIsNotNone(response.decision_metrics)
+        self.assertEqual(response.decision_metrics.calls, 2)
+        self.assertEqual(response.decision_metrics.failed_calls, 1)
+        self.assertEqual(response.decision_metrics.skipped_suppliers, 1)
+        self.assertEqual(response.decision_metrics.abstained, 1)
+        self.assertEqual(response.decision_metrics.pass_count, 1)
+
+    def test_relevance_screen_never_reaches_evaluation_input(self):
+        client = FakeClient()
+        self.supplier.fit_result, self.supplier.fit_confidence = 'pass', .99
+        self.supplier.price = '$12.50 / unit'
+        self.supplier.discovered_by = ['very long search query string']
+        self.supplier.aliases = ['alias.example']
+        self.run_eval(client)
+        raw_input = client.calls[0][1]['input']
+        self.assertNotIn('fit_', raw_input)
+        self.assertNotIn('"price":', raw_input)
+        self.assertNotIn('discovered_by', raw_input)
+        self.assertNotIn('aliases', raw_input)
+        self.assertNotIn('source_urls', raw_input)
+
+    def test_combined_evaluation_scores_discovery_fit_in_one_call_and_retries_rate_limit(self):
+        import json
+        from unittest.mock import AsyncMock, patch
+
+        class CombinedClient:
+            def __init__(self):
+                self.calls = 0
+
+            async def post(self, endpoint, payload):
+                self.calls += 1
+                if self.calls == 1:
+                    raise GeminiError('Rate limited', status_code=429, retry_after=0.01)
+                answers = {}
+                for key, q in payload['questions'].items():
+                    if q['type'] == 'score':
+                        answers[key] = {
+                            'type': 'score',
+                            'score': 2.7,
+                            'confidence': .9,
+                            'probabilities': {'0': .02, '1': .03, '2': .2, '3': .75},
+                        }
+                    else:
+                        answers[key] = {
+                            'type': 'choice',
+                            'choice': 'pass',
+                            'confidence': .95,
+                            'probabilities': {'pass': .95, 'fail': .025, 'unknown': .025},
+                        }
+                return {'answers': answers}
+
+        client = CombinedClient()
+        with patch('backend.evaluation.service.asyncio.sleep', new_callable=AsyncMock):
+            result = asyncio.run(GeminiEvaluator(client).evaluate_suppliers(
+                self.requirements,
+                [self.supplier],
+                discovery_prompt='Product: Steel bolts | Search focuses: steel bolts manufacturers',
+            ))
+        self.assertEqual(client.calls, 2)  # 1 retry + 1 combined call (not 2 separate passes)
+        self.assertEqual(self.supplier.fit_rank, 1)
+        self.assertEqual(self.supplier.fit_score, 90.0)
+        self.assertEqual(self.supplier.fit_result, 'pass')
+        self.assertEqual(result.assessments[0].eligibility, 'eligible')
+        self.assertIsNotNone(result.metrics.discovery_ranking)
+        self.assertEqual(result.metrics.discovery_ranking.calls, 1)
+
+    def test_failed_call_reports_supplier_failure(self):
+        events = []
+        asyncio.run(GeminiEvaluator(FakeClient(error=GeminiError('Unavailable'))).evaluate_suppliers(
+            self.requirements, [self.supplier], progress=events.append))
+        self.assertEqual(events[3]['status'], 'failed')
+        self.assertEqual(events[3]['message'], 'Unavailable')
+
+    def test_rank_by_discovery_uses_generated_prompt_and_assigns_fit_rank(self):
+        import json
+        s_low = self.supplier.model_copy(update={'supplier_id': 'low', 'name': 'Low Fit'})
+        s_high = self.supplier.model_copy(update={'supplier_id': 'high', 'name': 'High Fit'})
+        s_empty = self.supplier.model_copy(update={'supplier_id': 'empty', 'name': 'No Evidence', 'evidence': []})
+
+        class ScoreClient:
+            def __init__(self):
+                self.prompts = []
+
+            async def post(self, endpoint, payload):
+                data = json.loads(payload['input'])
+                self.prompts.append((endpoint, data['discovery_prompt'], payload['questions']['discovery_fit']['type']))
+                sid = data['supplier']['supplier_id']
+                score, conf = (2.8, .92) if sid == 'high' else (1.1, .75)
+                return {'answers': {'discovery_fit': {
+                    'type': 'score',
+                    'score': score,
+                    'confidence': conf,
+                    'probabilities': {'0': .02, '1': .08, '2': .2, '3': .7},
+                }}}
+
+        client = ScoreClient()
+        prompt = 'Product: Steel bolts | Search focuses: steel bolts manufacturers'
+        ranked, metrics = asyncio.run(GeminiEvaluator(client).rank_by_discovery(
+            prompt, [s_low, s_empty, s_high]
+        ))
+        self.assertEqual([s.supplier_id for s in ranked], ['high', 'low', 'empty'])
+        self.assertEqual([s.fit_rank for s in ranked], [1, 2, 3])
+        self.assertGreater(ranked[0].fit_score, ranked[1].fit_score)
+        self.assertEqual(ranked[0].fit_result, 'pass')
+        self.assertEqual(ranked[1].fit_result, 'unknown')
+        self.assertEqual(ranked[2].fit_result, 'fail')
+        self.assertEqual(metrics.prompt, prompt)
+        self.assertEqual(metrics.calls, 2)
+        self.assertEqual(metrics.status, 'done')
+        self.assertEqual(len(metrics.rubric), 4)
+        self.assertTrue(all(p[0] == 'decisions' and p[1] == prompt and p[2] == 'score' for p in client.prompts))
+
 
 class CitationRedirectTests(unittest.TestCase):
     def test_google_redirect_is_resolved_without_fetching_destination(self):
@@ -139,3 +292,45 @@ class CitationRedirectTests(unittest.TestCase):
             for url in ["http://127.0.0.1/private", "https://vertexaisearch.cloud.google.com.evil.test/grounding-api-redirect/test"]:
                 self.assertEqual(resolve_google_citation(url), url)
             factory.assert_not_called()
+
+
+class CriteriaSuggesterTests(unittest.TestCase):
+    def test_suggest_criteria_parses_and_normalizes_suggestions(self):
+        import json
+        from backend.domain.contracts import SuggestCriteriaRequest
+        from backend.criteria import GeminiCriteriaSuggester
+
+        class Client:
+            async def post(self, endpoint, payload):
+                self.endpoint = endpoint
+                self.payload = payload
+                return {
+                    'status': 'completed',
+                    'steps': [{'type': 'model_output', 'content': [{
+                        'type': 'text',
+                        'text': json.dumps({'criteria': [
+                            {'id': 'ISO 9001!', 'description': 'Holds ISO 9001 certification.', 'kind': 'mandatory', 'weight': 5},
+                            {'id': 'ISO 9001!', 'description': 'Ships to Germany within 2 weeks.', 'kind': 'preference', 'weight': 2.5},
+                        ]}),
+                    }]}],
+                }
+
+        client = Client()
+        result = asyncio.run(GeminiCriteriaSuggester(client).suggest_criteria(
+            SuggestCriteriaRequest(product='Steel bolts', quantity=1000, delivery_country='Germany')))
+        self.assertEqual(client.endpoint, 'interactions')
+        self.assertEqual([c.id for c in result.criteria], ['iso-9001', 'iso-9001-2'])
+        self.assertEqual(result.criteria[0].weight, 1.0)
+        self.assertEqual(result.criteria[1].weight, 2.5)
+
+    def test_suggest_criteria_rejects_empty_or_incomplete_response(self):
+        from backend.domain.contracts import SuggestCriteriaRequest
+        from backend.criteria import GeminiCriteriaSuggester
+
+        class IncompleteClient:
+            async def post(self, endpoint, payload):
+                return {'status': 'failed', 'steps': []}
+
+        with self.assertRaises(GeminiError):
+            asyncio.run(GeminiCriteriaSuggester(IncompleteClient()).suggest_criteria(
+                SuggestCriteriaRequest(product='Steel bolts')))

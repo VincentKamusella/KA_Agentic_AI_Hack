@@ -99,6 +99,11 @@ class GeminiDiscovery:
         groups = {}
         stagnant = 0
         plan = search_plan(requirements, options)
+        coverage.discovery_prompt = (
+            f"Product: {requirements.product} | Quantity: {requirements.quantity} | "
+            f"Delivery country: {requirements.delivery_country} | Generated search focuses: "
+            + "; ".join(spec[0] for spec in plan)
+        )
         concurrency = options.search_concurrency or len(plan)
         await self.report_progress(result)
         for offset in range(0, len(plan), concurrency):

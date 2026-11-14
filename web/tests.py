@@ -26,6 +26,24 @@ class DeploymentSmokeTests(SimpleTestCase):
         for route in ['/api/discover/', '/api/evaluate/', '/api/evaluate-jobs/']:
             self.assertEqual(self.client.post(route, data='{}', content_type='application/json').status_code, 404)
 
+    def test_suggest_criteria_endpoint_returns_suggestions(self):
+        from backend.domain.contracts import Criterion, SuggestCriteriaResponse
+
+        async def fake_suggest(*args, **kwargs):
+            return SuggestCriteriaResponse(criteria=[
+                Criterion(id='iso', description='Holds ISO 9001 certification.', kind='mandatory', weight=1),
+                Criterion(id='delivery', description='Ships to Germany.', kind='preference', weight=2),
+            ])
+
+        with patch('web.views.GeminiClient'), patch('web.views.GeminiCriteriaSuggester.suggest_criteria', side_effect=fake_suggest):
+            response = self.client.post(
+                '/api/suggest-criteria/',
+                data=json.dumps({'product': 'Steel bolts', 'quantity': 1000, 'delivery_country': 'Germany'}),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([c['id'] for c in response.json()['criteria']], ['iso', 'delivery'])
+
     def test_invalid_inputs(self):
         for data in ('invalid', '{}', 'null'):
             result = self.client.post('/api/research/', data=data, content_type='application/json')

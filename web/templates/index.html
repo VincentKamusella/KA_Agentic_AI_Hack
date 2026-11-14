@@ -44,8 +44,17 @@
 </form>
 <ol class="stages" aria-label="Workflow"><li id="stage-discover" aria-current="step"><span>1</span>Discovery</li><li id="stage-eval"><span>2</span>Evaluation</li><li id="stage-shortlist"><span>3</span>Shortlist</li></ol>
 <div class="workspace">
-<aside class="criteria-panel"><div class="section-heading"><h2>Decision criteria</h2><button id="add" type="button" class="btn btn-link btn-sm p-0">Add</button></div>
-<p class="help">Mandatory requirements are gates. Preferences rank suppliers that pass.</p><div id="criteria"></div>
+<aside class="criteria-panel"><div class="section-heading"><h2>Decision criteria</h2><div class="criteria-actions"><button id="suggest" type="button" class="btn btn-link btn-sm p-0" hidden>Suggest</button><button id="add" type="button" class="btn btn-link btn-sm p-0">Add</button></div></div>
+<p class="help">Every criterion listed under <strong>Used for evaluation</strong> is assessed against supplier evidence. Mandatory gates determine eligibility; preferences rank eligible suppliers.</p>
+<div id="suggested-box" class="suggested-box" hidden>
+<div class="suggested-head"><span>Optional suggestions (check to include)</span><button id="select-all-suggestions" type="button" class="btn btn-link btn-sm p-0" hidden>Select all</button></div>
+<p id="suggested-status" class="help" role="status" aria-live="polite"></p>
+<div id="suggested-criteria" class="suggested-list"></div>
+</div>
+<div class="active-criteria-head"><span>Used for evaluation</span><span id="active-criteria-count" class="badge">0</span></div>
+<p id="criteria-sync-note" class="criteria-sync-note" hidden>Criteria changed — re-run evaluation to apply.</p>
+<div id="criteria"></div>
+<p id="criteria-empty" class="help">No criteria selected. Check a suggestion above or click Add.</p>
 <p class="help">Quantity and destination guide discovery. Add explicit criteria to assess them.</p>
 <p class="footnote">No orders placed.<br>No supplier messages sent.</p></aside>
 <section class="results" aria-labelledby="results-title">
@@ -56,18 +65,23 @@
 <button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry research</button>
 <a id="view-shortlist-action" class="btn btn-primary btn-sm" href="#/shortlist" hidden>View shortlist</a>
 </div>
+<section id="run-trace" class="run-trace" aria-labelledby="run-trace-title" hidden>
+<div class="run-trace-head"><span class="run-indicator" aria-hidden="true"></span><h3 id="run-trace-title">Live run</h3><span id="run-trace-summary" class="run-trace-summary"></span><span id="run-trace-time" class="run-time" aria-hidden="true"></span></div>
+<ol id="run-steps" class="run-steps"></ol>
+<div class="provenance-key" aria-label="Provenance key"><span data-source-tag="decision"></span><span data-source-tag="search"></span><span data-source-tag="code"></span><span data-source-tag="rules"></span></div>
+</section>
 <div class="research-totals" aria-label="Research summary"><div><span>Discovered suppliers</span><strong id="total-suppliers">0</strong></div><div><span>Source excerpts</span><strong id="total-evidence">0</strong></div><div><span>Shortlisted</span><strong id="total-shortlist">0</strong></div></div>
 <div id="coverage" class="mt-3" aria-live="polite" hidden></div>
-<div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Update shortlist <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
+<div id="content" hidden><div class="result-actions"><div><p id="count"></p><p id="eval-criteria-preview" class="eval-criteria-preview"></p></div><button id="evaluate" type="button" class="btn btn-primary">Re-run evaluation <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
 </section></div></section>
 <section id="view-shortlist" data-view="shortlist" aria-labelledby="page-title" hidden>
-<div class="view-toolbar"><span class="subtle">Mandatory gates first. Preference ranking second.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Edit criteria</a></div>
-<div id="shortlist-empty" class="view-empty"><h2>No evaluation yet.</h2><p>Submit your brief to research suppliers and build your shortlist.</p><a class="btn btn-primary" href="#/discovery">Go to discovery</a></div>
-<div id="recommendation" class="alert alert-success" hidden></div><div id="comparison"></div>
+<div class="view-toolbar"><span class="subtle">Mandatory gates first. Preference ranking second.</span><span class="provenance-key compact"><span data-source-tag="decision"></span><span data-source-tag="rules"></span></span><div class="criteria-actions"><button id="reevaluate" type="button" class="btn btn-primary btn-sm" hidden>Re-run evaluation</button><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Edit criteria</a></div></div>
+<div id="shortlist-empty" class="view-empty"><h2 id="shortlist-empty-title">No evaluation yet.</h2><p id="shortlist-empty-desc">Submit your brief to research suppliers and build your shortlist.</p><div class="view-empty-actions"><button id="shortlist-empty-eval" type="button" class="btn btn-primary" hidden>Re-run evaluation</button><a class="btn btn-outline-secondary" href="#/discovery">Go to discovery</a></div></div>
+<div id="recommendation" class="alert alert-success" hidden></div><div id="evaluated-criteria" class="evaluated-criteria" hidden></div><div id="decision-performance" class="decision-perf" hidden></div><div id="comparison"></div>
 <div id="shortlist-evidence-link" hidden><a class="btn btn-outline-secondary btn-sm" href="#/evidence">Inspect supporting evidence →</a></div>
 </section>
 <section id="view-evidence" data-view="evidence" aria-labelledby="page-title" hidden>
-<div class="view-toolbar"><span class="subtle">Source excerpts, criterion assessments, and clarification drafts.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Back to discovery</a></div>
+<div class="view-toolbar"><span class="subtle">Source excerpts, criterion assessments, and clarification drafts.</span><span class="provenance-key compact"><span data-source-tag="decision"></span><span data-source-tag="search"></span></span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Back to discovery</a></div>
 <div id="evidence-empty" class="view-empty"><h2>No source evidence yet.</h2><p>Run discovery to collect supplier sources. Evaluation adds criterion-level assessments.</p><a class="btn btn-primary" href="#/discovery">Find suppliers</a></div>
 <div id="sources"></div>
 </section>

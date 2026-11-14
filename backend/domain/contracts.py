@@ -61,6 +61,64 @@ class SupplierEvidence(Contract):
     legal_id: str | None = None
     identity_status: Literal["unverified", "site_identified"] = "unverified"
     crawl_status: Literal["pending", "complete", "partial", "unavailable"] = "pending"
+    price: str | None = None
+    # Discovery prompt ranking by the decision model; None when it did not run.
+    fit_rank: int | None = Field(default=None, ge=1)
+    fit_score: float | None = Field(default=None, ge=0, le=100)
+    fit_result: Literal["pass", "fail", "unknown"] | None = None
+    fit_confidence: float | None = Field(default=None, ge=0, le=1)
+    fit_probabilities: dict[str, float] | None = None
+
+
+class EvidenceDecision(Contract):
+    """One raw decision-model answer for one excerpt. `counted` is False when the
+    answer abstained or fell below the confidence threshold."""
+
+    evidence_id: str = Field(min_length=1)
+    choice: Literal["pass", "fail", "unknown"]
+    confidence: float = Field(ge=0, le=1)
+    counted: bool
+    probabilities: dict[str, float] | None = None
+
+
+class SupplierDecisionMetrics(Contract):
+    supplier_id: str = Field(min_length=1)
+    status: Literal["done", "failed", "skipped"]
+    questions: int = Field(ge=0)
+    calls: int = Field(ge=0)
+    elapsed_seconds: float = Field(ge=0)
+    pass_count: int = Field(default=0, ge=0)
+    fail_count: int = Field(default=0, ge=0)
+    unknown_count: int = Field(default=0, ge=0)
+    below_threshold_count: int = Field(default=0, ge=0)
+    message: str | None = None
+
+
+class DiscoveryRankingMetrics(Contract):
+    prompt: str
+    rubric: list[str] = Field(default_factory=list)
+    calls: int = Field(default=0, ge=0)
+    elapsed_seconds: float = Field(default=0.0, ge=0)
+    status: Literal["done", "failed", "skipped"]
+    message: str | None = None
+
+
+class DecisionMetrics(Contract):
+    model: str = Field(min_length=1)
+    confidence_threshold: float = Field(ge=0, le=1)
+    calls: int = Field(ge=0)
+    failed_calls: int = Field(default=0, ge=0)
+    skipped_suppliers: int = Field(default=0, ge=0)
+    questions: int = Field(ge=0)
+    counted: int = Field(default=0, ge=0)
+    pass_count: int = Field(default=0, ge=0)
+    fail_count: int = Field(default=0, ge=0)
+    abstained: int = Field(default=0, ge=0)
+    below_threshold: int = Field(default=0, ge=0)
+    elapsed_seconds: float = Field(ge=0)
+    evaluation_instructions: str = ""
+    discovery_ranking: DiscoveryRankingMetrics | None = None
+    suppliers: list[SupplierDecisionMetrics] = Field(default_factory=list)
 
 
 class CriterionAssessment(Contract):
@@ -75,6 +133,7 @@ class CriterionAssessment(Contract):
     score: float | None = Field(default=None, ge=0, le=100)
     evidence_ids: list[str] = Field(default_factory=list)
     explanation: str = Field(min_length=1)
+    decisions: list[EvidenceDecision] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence_and_score(self) -> "CriterionAssessment":
@@ -153,6 +212,7 @@ class DiscoveryCoverage(Contract):
     directory_urls: list[str] = Field(default_factory=list)
     stop_reason: str = "searching"
     exhaustive: bool = False
+    discovery_prompt: str = ""
 
 
 class DiscoveryResult(Contract):
@@ -165,6 +225,7 @@ class DiscoveryResult(Contract):
 class EvaluationResult(Contract):
     assessments: list[SupplierAssessment] = Field(default_factory=list)
     issues: list[PipelineIssue] = Field(default_factory=list)
+    metrics: DecisionMetrics | None = None
 
 
 class RecommendRequest(Contract):
@@ -177,3 +238,14 @@ class RecommendResponse(Contract):
     assessments: list[SupplierAssessment]
     recommended_supplier_ids: list[str] = Field(max_length=3)
     issues: list[PipelineIssue] = Field(default_factory=list)
+    decision_metrics: DecisionMetrics | None = None
+
+
+class SuggestCriteriaRequest(Contract):
+    product: str = Field(min_length=1, max_length=1000)
+    quantity: int | None = Field(default=None, gt=0, strict=True)
+    delivery_country: str = Field(default="", max_length=100)
+
+
+class SuggestCriteriaResponse(Contract):
+    criteria: list[Criterion] = Field(default_factory=list, max_length=8)

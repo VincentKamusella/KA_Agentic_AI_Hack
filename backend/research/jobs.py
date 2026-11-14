@@ -1,8 +1,9 @@
 """Enqueue client requests; execute research only in the dedicated worker."""
 import asyncio
 import logging
+import time
 
-from backend.domain.contracts import DiscoveryResult, EvaluationResult, SupplierEvidence
+from backend.domain.contracts import DiscoveryRankingMetrics, DiscoveryResult, EvaluationResult, SupplierEvidence
 from backend.persistence.store import LeaseLost
 from backend.research.requests import StageRequest
 
@@ -11,9 +12,14 @@ logger = logging.getLogger(__name__)
 
 def discovery_suppliers(store, token):
     job = store.get(token) if token else None
-    if not job or job['status'] != 'completed' or job['request'].get('stage') not in ('discover', 'research'):
+    result = (job or {}).get('result') or {}
+    discovery_ready = job and (
+        job['status'] == 'completed'
+        or (job['status'] in ('failed', 'interrupted') and result.get('phase') in ('evaluation', 'complete'))
+    )
+    if not discovery_ready or job['request'].get('stage') not in ('discover', 'research'):
         raise ValueError('A completed discovery job is required.')
-    suppliers = job['result'].get('suppliers', []) if job['result'] else []
+    suppliers = result.get('suppliers', [])
     if not suppliers:
         raise ValueError('Discover at least one supplier first.')
     return [SupplierEvidence.model_validate(s) for s in suppliers]
@@ -35,7 +41,12 @@ def start_job(store, payload, stage='research'):
 def execute_job(store, job_id, lease_id):
     # Provider and crawler imports stay outside the HTTP request path.
     from backend.discovery.service import GeminiDiscovery
-    from backend.evaluation.service import GeminiEvaluator
+    from backend.evaluation.service import (
+        DISCOVERY_RUBRIC,
+        GeminiEvaluator,
+        assign_fit_ranks,
+        build_decision_metrics,
+    )
     from backend.integrations.gemini import GeminiClient, GeminiError
     from backend.research.pipeline import shortlist
 
@@ -55,12 +66,16 @@ def execute_job(store, job_id, lease_id):
         interpreted = await interpret_requirements(payload.requirements, client)
         payload.requirements = interpreted
         await checkpoint({}, 'interpreting')
+        discovery_ranking = None
         if payload.discovery_job_id:
             suppliers = await asyncio.to_thread(discovery_suppliers, store, payload.discovery_job_id)
             source = await asyncio.to_thread(store.get, payload.discovery_job_id)
             discovery = DiscoveryResult.model_validate({k: v for k, v in source['result'].items()
                 if k in ('suppliers', 'coverage', 'issues', 'deferred_suppliers')})
             discovery.issues = [issue for issue in discovery.issues if issue.stage == 'discovery']
+            prior_ranking = (source['result'].get('decision_metrics') or {}).get('discovery_ranking')
+            if prior_ranking:
+                discovery_ranking = DiscoveryRankingMetrics.model_validate(prior_ranking)
         else:
             async def discovery_progress(result):
                 await checkpoint(result, 'discovery')
@@ -70,7 +85,12 @@ def execute_job(store, job_id, lease_id):
         if stage == 'discover':  # Compatibility for already queued jobs only.
             return {**discovery.model_dump(mode='json'), 'requirements': interpreted.model_dump(mode='json')}
         evaluator = GeminiEvaluator(client)
+        discovery_prompt = None
+        if not payload.discovery_job_id and hasattr(evaluator, 'rank_by_discovery') and suppliers:
+            discovery_prompt = discovery.coverage.discovery_prompt or payload.requirements.product
         evaluation = EvaluationResult()
+        supplier_metrics = []
+        eval_started = time.monotonic()
 
         def combined():
             return {**shortlist(suppliers, evaluation, discovery.issues).model_dump(mode='json'),
@@ -78,12 +98,40 @@ def execute_job(store, job_id, lease_id):
                     'coverage': discovery.coverage.model_dump(mode='json'),
                     'deferred_suppliers': [s.model_dump(mode='json') for s in discovery.deferred_suppliers]}
 
+        evaluation.metrics = build_decision_metrics([], 0.0, discovery_ranking=discovery_ranking)
         await checkpoint(combined(), 'evaluation')
-        for start in range(0, len(suppliers), 3):
-            batch = await evaluator.evaluate_suppliers(payload.requirements, suppliers[start:start + 3])
+        for start in range(0, len(suppliers), 6):
+            batch_suppliers = suppliers[start:start + 6]
+            if discovery_prompt is not None:
+                batch = await evaluator.evaluate_suppliers(
+                    payload.requirements, batch_suppliers, discovery_prompt=discovery_prompt
+                )
+            else:
+                batch = await evaluator.evaluate_suppliers(payload.requirements, batch_suppliers)
             evaluation.assessments.extend(batch.assessments)
             evaluation.issues.extend(batch.issues)
+            if batch.metrics:
+                supplier_metrics.extend(batch.metrics.suppliers)
+            if discovery_prompt is not None:
+                assign_fit_ranks(suppliers)
+                scored_calls = sum(bool(s.evidence) for s in suppliers[:start + 6])
+                failed_calls = sum(m.status == 'failed' for m in supplier_metrics)
+                status = 'skipped' if scored_calls == 0 else 'failed' if failed_calls == scored_calls else 'done'
+                discovery_ranking = DiscoveryRankingMetrics(
+                    prompt=discovery_prompt, rubric=DISCOVERY_RUBRIC, calls=scored_calls,
+                    elapsed_seconds=round(time.monotonic() - eval_started, 2), status=status,
+                    message=(
+                        'No crawled source excerpts available for discovery ranking.' if scored_calls == 0
+                        else f'{failed_calls} supplier ranking call(s) failed.' if failed_calls else None
+                    ),
+                )
+            evaluation.metrics = build_decision_metrics(
+                supplier_metrics, round(time.monotonic() - eval_started, 2), discovery_ranking=discovery_ranking
+            )
             await checkpoint(combined(), 'evaluation')
+        if discovery_prompt is not None:
+            suppliers = assign_fit_ranks(suppliers)
+            discovery.suppliers = suppliers
         return {**combined(), 'phase': 'complete'}
 
     try:
