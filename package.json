@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "bootstrap": "5.3.9"
+  },
+  "devDependencies": {
+    "prettier": "3.10.1"
+  },
+  "name": "quotepilot-ui",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/vendor-ui.mjs",
+    "format": "prettier --write web/static/web scripts/vendor-ui.mjs",
+    "check": "prettier --check web/static/web scripts/vendor-ui.mjs && node --check web/static/web/app.js"
+  }
+}
