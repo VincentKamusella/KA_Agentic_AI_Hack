@@ -29,13 +29,44 @@ class Deployer:
             raise DeploymentError('Codesphere API must be an HTTPS base URL without credentials or query parameters.')
         self.workspace, self.token, self.api = workspace, token, api.rstrip('/')
 
-    def cli(self, *args):
-        subprocess.run(['cs', *args], check=True, timeout=1200, env={
+    def cli(self, *args, timeout=1200, capture_output=False):
+        return subprocess.run(['cs', *args], check=True, timeout=timeout,
+                              capture_output=capture_output, text=True, env={
             **os.environ, 'CS_WORKSPACE_ID': self.workspace, 'CS_TOKEN': self.token, 'CS_API': self.api,
         })
 
-    def remote(self, command):
-        self.cli('exec', '--workdir', '/home/user/app', '--', command)
+    def remote(self, command, **options):
+        return self.cli('exec', '--workdir', '/home/user/app', '--', command, **options)
+
+    def check_health(self, service):
+        url = f'http://ws-server-{self.workspace}-{service}.workspaces:3000/health/'
+        # Codesphere exec has a short server-side deadline. Retry on the runner,
+        # never by sleeping or retrying inside a single remote execution.
+        command = ('status=$(curl --silent --show-error --connect-timeout 1 --max-time 2 '
+                   '-o /dev/null -w "%{http_code}" -H "Host: localhost" '
+                   + shlex.quote(url) + ') || exit $?; '
+                   'echo "Health HTTP $status"; test "$status" = 200')
+        reason = 'health request failed'
+        for attempt in range(12):
+            try:
+                self.remote(command, timeout=10, capture_output=True)
+                print(f'{service} health check passed (HTTP 200).')
+                return
+            except subprocess.TimeoutExpired:
+                reason = 'remote execution timed out'
+            except subprocess.CalledProcessError as exc:
+                output = (exc.stdout or '') + (exc.stderr or '')
+                if 'Execution timed out' in output:
+                    reason = 'Codesphere remote execution timed out'
+                elif 'Health HTTP ' in output or 'curl:' in output:
+                    reason = 'health endpoint did not return HTTP 200'
+                else:
+                    reason = 'Codesphere remote execution failed'
+            print(f'{service} health check attempt {attempt + 1}/12: {reason}.')
+            if attempt < 11:
+                time.sleep(5)
+        raise DeploymentError(f'Could not verify {service} health after 12 attempts: {reason}. '
+                              'Services were left running; inspect their logs and retry verification.')
 
     def states(self):
         request = Request(f'{self.api}/workspaces/{self.workspace}/pipeline/run',
@@ -102,9 +133,7 @@ class Deployer:
         self.wait(running=True)
         # Probe each service's internal endpoint from the workspace, without exposing the worker.
         for service in ('web', 'worker'):
-            url = f'http://ws-server-{self.workspace}-{service}.workspaces:3000/health/'
-            self.remote('curl --fail --silent --show-error --retry 12 --retry-all-errors '
-                        '--retry-delay 5 --max-time 10 -H "Host: localhost" ' + shlex.quote(url))
+            self.check_health(service)
         print(f'Deployed {sha} to Codesphere workspace {self.workspace}.')
 
 

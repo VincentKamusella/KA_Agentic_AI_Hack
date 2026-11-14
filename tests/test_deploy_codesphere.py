@@ -66,7 +66,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_deployment_orders_stop_update_sync_prepare_start_health(self):
         events = []
-        with patch.object(self.deployer, 'remote', side_effect=lambda command: events.append(('remote', command))), patch.object(self.deployer, 'cli', side_effect=lambda *args: events.append(('cli', args))), patch.object(self.deployer, 'wait', side_effect=lambda **kwargs: events.append(('wait', kwargs))), patch.object(self.deployer, 'states', side_effect=lambda: events.append(('states', None))):
+        with patch.object(self.deployer, 'remote', side_effect=lambda command, **options: events.append(('remote', command))), patch.object(self.deployer, 'cli', side_effect=lambda *args: events.append(('cli', args))), patch.object(self.deployer, 'wait', side_effect=lambda **kwargs: events.append(('wait', kwargs))), patch.object(self.deployer, 'states', side_effect=lambda: events.append(('states', None))):
             self.deployer.deploy(SHA)
         self.assertIn('git status --porcelain', events[0][1])
         self.assertIn('Database connection failed', events[1][1])
@@ -87,6 +87,49 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(self.deployer, 'remote') as remote, patch.object(self.deployer, 'cli', side_effect=command), patch.object(self.deployer, 'wait'), patch.object(self.deployer, 'states', return_value=[]), self.assertRaises(subprocess.CalledProcessError):
             self.deployer.deploy(SHA)
         self.assertEqual(remote.call_count, 3)
+
+    def test_health_probe_retries_on_runner_after_remote_timeout(self):
+        failure = subprocess.CalledProcessError(1, 'cs', stderr='error 408 (Execution timed out)')
+        with patch.object(self.deployer, 'remote', side_effect=[failure, None]) as remote, \
+             patch('scripts.deploy_codesphere.time.sleep') as sleep:
+            self.deployer.check_health('web')
+        self.assertEqual(remote.call_count, 2)
+        sleep.assert_called_once_with(5)
+        command = remote.call_args.args[0]
+        self.assertIn('--connect-timeout 1 --max-time 2', command)
+        self.assertNotIn('--retry', command)
+        self.assertNotIn('sleep', command)
+        self.assertEqual(remote.call_args.kwargs, {'timeout': 10, 'capture_output': True})
+
+    def test_health_timeout_is_bounded_and_preserves_failure(self):
+        with patch.object(self.deployer, 'remote', side_effect=subprocess.TimeoutExpired('cs', 10)) as remote, \
+             patch('scripts.deploy_codesphere.time.sleep') as sleep, \
+             self.assertRaisesRegex(DeploymentError, 'worker.*12 attempts.*remote execution timed out'):
+            self.deployer.check_health('worker')
+        self.assertEqual(remote.call_count, 12)
+        self.assertEqual(sleep.call_count, 11)
+
+    def test_health_shell_requires_exact_http_200(self):
+        # Exercise the actual shell status handling, replacing only curl.
+        for status in ('200', '302', '503'):
+            def remote(command, **options):
+                return subprocess.run(['sh', '-c', f'curl() {{ printf {status}; }}; ' + command],
+                                      check=True, text=True, **options)
+            with self.subTest(status=status), patch.object(self.deployer, 'remote', side_effect=remote), \
+                 patch('scripts.deploy_codesphere.time.sleep'):
+                if status == '200':
+                    self.deployer.check_health('web')
+                else:
+                    with self.assertRaisesRegex(DeploymentError, 'endpoint did not return HTTP 200'):
+                        self.deployer.check_health('web')
+
+    def test_failed_health_never_announces_successful_deployment(self):
+        with patch.object(self.deployer, 'remote'), patch.object(self.deployer, 'cli'), \
+             patch.object(self.deployer, 'wait'), patch.object(self.deployer, 'states', return_value=[]), \
+             patch.object(self.deployer, 'check_health', side_effect=DeploymentError('unhealthy')), \
+             patch('builtins.print') as output, self.assertRaises(DeploymentError):
+            self.deployer.deploy(SHA)
+        output.assert_not_called()
 
     def test_readiness_requires_both_worker_replicas(self):
         web = {'server': 'web', 'replica': 'web-0', 'state': 'running'}
