@@ -407,6 +407,7 @@ function render() {
       hr = el("tr");
     for (const [text, source] of [
       ["Supplier"],
+      ["Price"],
       ["Mandatory status", "rules"],
       ["Preferences", "rules"],
       ["Evidence coverage", "rules"],
@@ -428,14 +429,22 @@ function render() {
       const a = assessments.get(s.supplier_id),
         row = el("tr"),
         name = el("td");
+      const tier = fitTier(s);
+      if (tier) row.dataset.fit = tier;
       name.append(el("strong", s.name));
       if (chosen.includes(s)) name.append(el("small", "Shortlisted"));
       const fit = fitLine(s);
       if (fit) name.append(fit);
       row.append(name);
+      const priceCell = el(
+        "td",
+        s.price || "Not listed",
+        s.price ? "price-value" : "muted",
+      );
       const status = el("td");
       status.append(a ? badge(a.eligibility) : badge("Not evaluated"));
       row.append(
+        priceCell,
         status,
         el("td", a ? `${Math.round(a.preference_score)} / 100` : "—"),
         el("td", a ? `${Math.round(a.evidence_coverage * 100)}%` : "—"),
@@ -551,6 +560,41 @@ function sourceTag(kind, title) {
 }
 function percent(value) {
   return `${Math.round(value * 100)}%`;
+}
+function fitTier(supplier) {
+  if (!supplier.fit_result) return "";
+  if (supplier.fit_result === "pass")
+    return (supplier.fit_confidence ?? 0) >= DECISION_THRESHOLD
+      ? "strong"
+      : "moderate";
+  if (supplier.fit_result === "unknown") return "unknown";
+  return "poor";
+}
+function fitRank(supplier) {
+  const conf = supplier.fit_confidence ?? 0;
+  if (supplier.fit_result === "pass") return [0, -conf];
+  if (supplier.fit_result === "unknown") return [1, 0];
+  if (!supplier.fit_result) return [2, 0];
+  return [3, conf];
+}
+function sortSuppliersByFit(list) {
+  return [...list].sort((a, b) => {
+    const [ra, ca] = fitRank(a),
+      [rb, cb] = fitRank(b);
+    return ra - rb || ca - cb;
+  });
+}
+function priceLine(supplier) {
+  const line = el("p", undefined, "price-line");
+  line.append(
+    el("span", "Listed price: ", "muted"),
+    el(
+      "span",
+      supplier.price || "Not listed in cited sources",
+      supplier.price ? "price-value" : "muted",
+    ),
+  );
+  return line;
 }
 function fitLine(supplier) {
   if (!supplier.fit_result) return null;
@@ -814,6 +858,8 @@ function traceEvent(event) {
         );
         if (!chip) continue;
         chip.dataset.choice = a.choice;
+        if (a.confidence < DECISION_THRESHOLD)
+          chip.dataset.lowConfidence = "true";
         chip.lastChild.textContent = `${labels[a.choice]} ${percent(a.confidence)}`;
       }
     }
@@ -1022,6 +1068,8 @@ function renderCandidates() {
   $("candidates").replaceChildren();
   for (const supplier of suppliers) {
     const row = el("div", undefined, "candidate-row");
+    const tier = fitTier(supplier);
+    if (tier) row.dataset.fit = tier;
     const description = el("div");
     description.append(
       el("h3", supplier.name),
