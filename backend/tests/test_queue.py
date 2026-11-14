@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from django.conf import settings
 from django.test import TransactionTestCase, override_settings
@@ -15,6 +15,7 @@ from backend.persistence.store import LeaseLost, ResearchStore
 from backend.research.requests import StageRequest
 from backend.tests.base import StoreCase
 from backend.tests.support import DemoDiscovery, DemoEvaluator, demo_fixture
+from backend.tests.test_recommendations import draft, provider_response
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
@@ -22,6 +23,8 @@ class QueueTests(TransactionTestCase):
     def setUp(self):
         self.store = ResearchStore()
         self.payload = StageRequest.model_validate(demo_fixture()['request'])
+        self.gemini = AsyncMock()
+        self.gemini.post.return_value = provider_response([draft()])
 
     def expire(self, claim):
         ResearchJob.objects.filter(pk=claim['id']).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
@@ -74,12 +77,12 @@ class QueueTests(TransactionTestCase):
         self.assertIsNotNone(self.store.claim())
 
     def test_evaluation_uses_saved_evidence(self):
-        with patch('backend.integrations.gemini.GeminiClient'), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
+        with patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
             token = start_job(self.store, self.payload, 'discover')
             claim = self.store.claim()
             execute_job(self.store, claim['id'], claim['lease_id'])
         payload = self.payload.model_dump(mode='json') | {'discovery_job_id': token}
-        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient'):
+        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini):
             response = self.client.post('/api/research/', json.dumps(payload), content_type='application/json')
             self.assertEqual(response.status_code, 202)
             evaluation_token = response.json()['job_id']
@@ -90,8 +93,9 @@ class QueueTests(TransactionTestCase):
         self.assertEqual(result['status'], 'completed')
         self.assertEqual(result['request']['stage'], 'evaluate')
         self.assertEqual(result['result']['recommended_supplier_ids'], ['alpha'])
+        self.assertEqual(result['result']['recommendation_report']['recommendations'][0]['supplier_id'], 'alpha')
         # Re-running evaluation against the same discovery job works repeatedly.
-        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient'):
+        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini):
             second = self.client.post('/api/research/', json.dumps(payload), content_type='application/json')
             self.assertEqual(second.status_code, 202)
             claim = self.store.claim()
@@ -101,7 +105,7 @@ class QueueTests(TransactionTestCase):
         self.assertEqual(self.client.post('/api/research/', json.dumps(payload), content_type='application/json').status_code, 400)
 
     def test_evaluation_can_rerun_when_discovery_finished_before_eval_failed(self):
-        with patch('backend.integrations.gemini.GeminiClient'), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
+        with patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
             token = start_job(self.store, self.payload, 'research')
             ResearchJob.objects.filter(access_token=token).update(
                 status='failed',
@@ -109,7 +113,7 @@ class QueueTests(TransactionTestCase):
                 error='Evaluation timed out',
             )
         payload = self.payload.model_dump(mode='json') | {'discovery_job_id': token}
-        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient'):
+        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini):
             response = self.client.post('/api/research/', json.dumps(payload), content_type='application/json')
             self.assertEqual(response.status_code, 202)
             claim = self.store.claim()
@@ -162,7 +166,7 @@ class QueueTests(TransactionTestCase):
         self.assertTrue(result['result']['coverage']['queries'][0]['cached'])
 
     def test_single_submission_runs_discovery_and_evaluation(self):
-        with patch('backend.integrations.gemini.GeminiClient'), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()), patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()):
+        with patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()), patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()):
             response = self.client.post('/api/research/', json.dumps(demo_fixture()['request']), content_type='application/json')
             self.assertEqual(response.status_code, 202)
             token = response.json()['job_id']
@@ -173,6 +177,38 @@ class QueueTests(TransactionTestCase):
         self.assertEqual(job['result']['recommended_supplier_ids'], ['alpha'])
         self.assertEqual(len(job['result']['assessments']), 3)
         self.assertIn('coverage', job['result'])
+        report = job['result']['recommendation_report']
+        self.assertEqual(report['recommendations'][0]['qualification'], 'meets_documented_requirements')
+        self.assertIn('1000 pieces', report['recommendations'][0]['email_draft']['body'])
+        status = self.client.get(f'/api/research/{token}/')
+        self.assertEqual(status.json()['result']['recommendation_report'], report)
+
+    def test_recommendation_failure_preserves_completed_grades_and_checkpoint(self):
+        from backend.integrations.gemini import GeminiError
+        self.gemini.post.side_effect = GeminiError('Recommendation provider unavailable')
+        with patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini), \
+             patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()), \
+             patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), \
+             patch.object(self.store, 'update', wraps=self.store.update) as updates:
+            token = start_job(self.store, self.payload)
+            claim = self.store.claim()
+            execute_job(self.store, claim['id'], claim['lease_id'])
+        checkpoints = [call.kwargs.get('result', {}) for call in updates.call_args_list]
+        checkpoint = next(result for result in checkpoints if result.get('phase') == 'recommendation')
+        self.assertEqual(len(checkpoint['assessments']), 3)
+        job = self.store.get(token)
+        self.assertEqual(job['status'], 'completed')
+        self.assertEqual(job['result']['recommended_supplier_ids'], ['alpha'])
+        self.assertIsNone(job['result']['recommendation_report'])
+        self.assertEqual(job['result']['issues'][-1]['stage'], 'recommendation')
+
+    def test_discovery_is_reusable_after_interrupted_recommendation(self):
+        from backend.research.jobs import discovery_suppliers
+        token = start_job(self.store, self.payload)
+        ResearchJob.objects.filter(access_token=token).update(
+            status='failed', result={'phase': 'recommendation',
+                                     'suppliers': demo_fixture()['response']['suppliers']})
+        self.assertEqual(len(discovery_suppliers(self.store, token)), 3)
 
     def test_worker_supervisor_requeues_on_shutdown_and_terminates_child(self):
         import threading
