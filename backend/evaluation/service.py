@@ -16,8 +16,8 @@ from backend.integrations.gemini import GeminiError
 
 CONFIDENCE_THRESHOLD = 0.85  # Provisional hackathon threshold; not calibrated on customers.
 DECISION_MODEL = "gemini-decision-1"
-# Discovery's relevance screen must not anchor criterion-level decisions.
-SCREEN_FIELDS = {"fit_result", "fit_confidence"}
+# Discovery's derived fields must not anchor criterion-level decisions.
+SCREEN_FIELDS = {"fit_result", "fit_confidence", "price"}
 
 
 def no_progress(event):
