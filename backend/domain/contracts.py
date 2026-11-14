@@ -1,8 +1,9 @@
 """Shared wire models for discovery, evaluation, and the Django product layer."""
 
+from datetime import date
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StrictFloat, StrictInt, model_validator
 
 
 class Contract(BaseModel):
@@ -18,12 +19,20 @@ class Criterion(Contract):
 
 class Requirements(Contract):
     product: str = Field(min_length=1)
-    quantity: int = Field(gt=0, strict=True)
+    quantity: StrictInt | StrictFloat = Field(gt=0)
+    quantity_unit: str = Field(default="pieces", min_length=1, max_length=40)
+    needed_by: date | None = None
+    other_requirements: str = Field(default="", max_length=4000)
     delivery_country: str = Field(min_length=1)
     criteria: list[Criterion] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def unique_criteria(self) -> "Requirements":
+        for field in ("product", "delivery_country", "quantity_unit"):
+            value = getattr(self, field).strip()
+            if not value:
+                raise ValueError(f"{field} must not be blank")
+            setattr(self, field, value)
         ids = [criterion.id for criterion in self.criteria]
         if len(ids) != len(set(ids)):
             raise ValueError("Criterion IDs must be unique")

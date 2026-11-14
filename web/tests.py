@@ -45,6 +45,23 @@ class DeploymentSmokeTests(SimpleTestCase):
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
 class ResearchApiTests(SimpleTestCase):
+    def test_simple_brief_is_queued_without_criteria(self):
+        payload = {'requirements': {'product': 'Containers', 'quantity': 2.5,
+            'quantity_unit': 'kg', 'delivery_country': 'Germany', 'needed_by': None,
+            'other_requirements': 'EU manufacturing required'}}
+        with patch('backend.research.jobs.start_job', return_value='a' * 64) as start, patch('backend.persistence.store.ResearchStore'):
+            response = self.client.post('/api/research/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(start.call_args.args[1].requirements.criteria, [])
+        self.assertEqual(start.call_args.args[1].requirements.quantity_unit, 'kg')
+
+    def test_field_errors_do_not_echo_submitted_values(self):
+        payload = {'requirements': {'product': 'Private product', 'quantity': -1, 'delivery_country': 'Germany'}}
+        response = self.client.post('/api/research/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['fields'][0]['path'], 'requirements.quantity')
+        self.assertNotIn('Private product', response.content.decode())
+
     def test_background_discovery_accepts_larger_budgets(self):
         payload = demo_fixture()['request']
         payload['options'] = {'max_suppliers': 100, 'max_pages_per_supplier': 20, 'max_queries': 24}

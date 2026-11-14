@@ -5,6 +5,33 @@ from backend.tests.base import StoreCase
 
 
 class JobTests(StoreCase):
+    def test_simple_brief_is_interpreted_saved_and_can_be_reevaluated(self):
+        from backend.research.jobs import start_job, execute_job
+        from backend.tests.support import DemoDiscovery, DemoEvaluator
+        from backend.research.requests import StageRequest
+        payload = StageRequest.model_validate({'requirements': {
+            'product': 'Containers', 'quantity': 2.5, 'quantity_unit': 'kg', 'delivery_country': 'Germany',
+        }})
+        with patch('backend.integrations.gemini.GeminiClient'), \
+             patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()), \
+             patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()):
+            job = start_job(self.store, payload)
+            claim = self.store.claim()
+            execute_job(self.store, claim['id'], claim['lease_id'])
+        state = self.store.get(job)
+        self.assertEqual(state['status'], 'completed')
+        self.assertEqual(state['request']['requirements']['criteria'], [])
+        interpreted = state['result']['requirements']
+        self.assertEqual([c['id'] for c in interpreted['criteria']], ['product', 'quantity', 'destination'])
+        self.assertEqual(len(state['result']['assessments']), 3)
+        revised = StageRequest.model_validate({'requirements': interpreted, 'discovery_job_id': job})
+        self.assertTrue(start_job(self.store, revised))
+        for field, value in [('quantity_unit', 'pieces'), ('needed_by', '2027-03-15'),
+                             ('other_requirements', 'EU required')]:
+            changed = StageRequest.model_validate({'requirements': {**interpreted, field: value}, 'discovery_job_id': job})
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'fresh research'):
+                start_job(self.store, changed)
+
     def test_background_job_persists_result(self):
         from backend.research.jobs import start_job, execute_job
         from backend.tests.support import DemoDiscovery, demo_fixture
