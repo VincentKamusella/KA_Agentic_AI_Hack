@@ -167,8 +167,12 @@ def parse_page(requested, url, body, content_type):
     kind, name, legal_id, links, title = 'page', '', '', [], ''
     if 'application/pdf' in content_type or body.startswith(b'%PDF-'):
         try:
+            # macOS networking frameworks cannot safely fork a threaded process.
+            # Allow Python's posix_spawn path; Python-created descriptors are
+            # non-inheritable, and the parser keeps its resource/time limits.
             process = subprocess.run([sys.executable, '-m', 'backend.discovery.pdf'], input=body,
-                                     capture_output=True, timeout=15, check=True)
+                                     capture_output=True, timeout=15, check=True,
+                                     close_fds=sys.platform != 'darwin')
             document = json.loads(process.stdout)
             text, title = document['text'], document['title']
         except (subprocess.SubprocessError, ValueError, KeyError) as exc:
@@ -300,7 +304,11 @@ def crawl_supplier(crawler, supplier, requirements, options):
     allowed = {hostname(supplier.website)}
     started = time.monotonic()
     attempts = 0
-    while queue and attempts < options.max_pages_per_supplier and time.monotonic() - started < 90:
+    # Failed URLs and duplicate pages do not consume the useful-evidence budget.
+    # A separate attempt ceiling still bounds dead sites and repetitive catalogs.
+    max_attempts = options.max_pages_per_supplier * 2 + 1
+    while (queue and len(supplier.evidence) < options.max_pages_per_supplier
+           and attempts < max_attempts and time.monotonic() - started < 90):
         url, depth = queue.pop(0)
         try:
             url = canonical_url(url)
@@ -333,7 +341,8 @@ def crawl_supplier(crawler, supplier, requirements, options):
                     except (ValueError, CrawlError):
                         continue
                 terms = re.findall(r'\w{3,}', requirements.product.lower()) + [
-                    'product', 'capabilit', 'certif', 'quality', 'about', 'contact', 'deliver', '.pdf']
+                    'product', 'catalog', 'shop', 'price', 'stock', 'spec', 'datasheet',
+                    'quantity', 'shipping', 'deliver', 'certif', '.pdf']
                 links = sorted(set(links), key=lambda u: (-sum(t in u.lower() for t in terms), u))
                 queue.extend((link, depth + 1) for link in links[:30])
         except (CrawlError, OSError, ValueError, http.client.HTTPException) as exc:

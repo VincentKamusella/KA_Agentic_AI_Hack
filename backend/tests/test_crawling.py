@@ -1,5 +1,8 @@
 import io
 import socket
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from unittest.mock import patch
 
 from backend.discovery.crawler import Crawler, CrawlError, canonical_url, parse_page, public_address
@@ -89,6 +92,12 @@ class FetchTests(StoreCase):
         page[NameObject('/Contents')] = writer._add_object(stream)
         buffer = io.BytesIO()
         writer.write(buffer)
-        extracted = parse_page('https://maker.test/spec.pdf', 'https://maker.test/spec.pdf', buffer.getvalue(), 'application/pdf')
+        # Extraction runs in crawler threads. On macOS it must not fork after
+        # native networking frameworks have initialized in the parent.
+        no_fork = (patch('subprocess._fork_exec', side_effect=AssertionError('Unsafe threaded fork'))
+                   if sys.platform == 'darwin' else nullcontext())
+        with no_fork, ThreadPoolExecutor(max_workers=1) as pool:
+            extracted = pool.submit(parse_page, 'https://maker.test/spec.pdf',
+                                    'https://maker.test/spec.pdf', buffer.getvalue(), 'application/pdf').result()
         self.assertEqual(extracted.kind, 'pdf')
         self.assertIn('Precision bolts ISO 9001', extracted.text)

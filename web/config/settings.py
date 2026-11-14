@@ -169,3 +169,11 @@ LOGGING = {
 
 # Bounded research payloads: 100 suppliers × 20 source passages.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 16_000_000
+
+# Shared database-wide job limit; all worker instances should use the same value.
+try:
+    RESEARCH_MAX_RUNNING = int(os.getenv('RESEARCH_MAX_RUNNING', '2'))
+    if not 1 <= RESEARCH_MAX_RUNNING <= 32:
+        raise ValueError
+except ValueError:
+    raise ImproperlyConfigured('RESEARCH_MAX_RUNNING must be an integer between 1 and 32.') from None

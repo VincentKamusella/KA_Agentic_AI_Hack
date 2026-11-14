@@ -26,7 +26,7 @@ class QueueTests(TransactionTestCase):
         self.store = ResearchStore()
         self.payload = StageRequest.model_validate(demo_fixture()['request'])
         self.gemini = AsyncMock()
-        self.gemini.post.return_value = provider_response([draft()])
+        self.gemini.post.return_value = provider_response([draft(), draft('gamma')])
         # The research API requires a signed-in account.
         self.user = get_user_model().objects.create_user('buyer@example.com', 'buyer@example.com', 'unused-password')
         self.client.force_login(self.user)
@@ -250,6 +250,7 @@ class QueueTests(TransactionTestCase):
         self.assertIsNotNone(self.store.claim())
 
 
+@override_settings(RESEARCH_MAX_RUNNING=2)
 class ConcurrencyTests(StoreCase):
     def test_job_capacity_is_enforced_across_simultaneous_connections(self):
         from concurrent.futures import ThreadPoolExecutor
@@ -258,3 +259,64 @@ class ConcurrencyTests(StoreCase):
         with ThreadPoolExecutor(max_workers=6) as pool:
             ids = list(pool.map(lambda _: self.store.claim(), range(6)))
         self.assertEqual(len([job for job in ids if job]), 2)
+
+
+class WorkerPoolTests(TransactionTestCase):
+    @override_settings(RESEARCH_MAX_RUNNING=3)
+    def test_pool_launches_to_capacity_before_any_child_finishes(self):
+        import threading
+        from unittest.mock import Mock
+        from backend.research.worker import supervise_pool
+        store = Mock()
+        store.claim.side_effect = [{'id': str(i), 'lease_id': str(i)} for i in range(3)]
+        stopping = threading.Event()
+        launched = []
+
+        def launch_job(store, claim):
+            launched.append(claim['id'])
+            if len(launched) == 3:
+                stopping.set()
+            return Mock(claim=claim)
+
+        with patch('backend.research.worker.launch', side_effect=launch_job), \
+             patch('backend.research.worker.finish') as finish:
+            supervise_pool(store, stopping)
+        self.assertEqual(launched, ['0', '1', '2'])
+        self.assertEqual(store.claim.call_count, 3)
+        self.assertEqual(finish.call_count, 3)
+
+    @override_settings(RESEARCH_MAX_RUNNING=2)
+    def test_pool_refills_finished_slot_while_other_job_keeps_running(self):
+        from unittest.mock import Mock
+        from backend.research.worker import supervise_pool
+        stopping = Mock()
+        stopping.is_set.return_value = False
+        store = Mock()
+        store.claim.side_effect = [{'id': str(i), 'lease_id': str(i)} for i in range(3)]
+        jobs = [Mock(claim={'id': str(i), 'lease_id': str(i)}) for i in range(3)]
+        launched = []
+
+        def launch_job(store, claim):
+            launched.append(claim['id'])
+            if len(launched) == 3:
+                stopping.is_set.return_value = True
+            return jobs[int(claim['id'])]
+
+        with patch('backend.research.worker.launch', side_effect=launch_job), \
+             patch('backend.research.worker.keep_running', side_effect=[True, False]) as poll, \
+             patch('backend.research.worker.finish') as finish:
+            supervise_pool(store, stopping)
+        self.assertEqual(launched, ['0', '1', '2'])
+        self.assertEqual(poll.call_count, 2)
+        self.assertEqual(finish.call_args_list[0].args[1], jobs[1])
+        self.assertEqual(finish.call_count, 3)
+
+    @override_settings(RESEARCH_MAX_RUNNING=8)
+    def test_configured_limit_is_enforced_across_database_connections(self):
+        from concurrent.futures import ThreadPoolExecutor
+        store = ResearchStore()
+        for _ in range(10):
+            store.create({})
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            claims = list(pool.map(lambda _: store.claim(), range(10)))
+        self.assertEqual(sum(claim is not None for claim in claims), 8)

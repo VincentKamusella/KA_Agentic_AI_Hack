@@ -365,7 +365,7 @@ test("interpreting checkpoints without requirements or suppliers render progress
   fillBrief(dom);
   submit(dom);
   await settle(() => Boolean(release));
-  assert.match(text(d, "results-state"), /Understanding your requirements/);
+  assert.match(text(d, "results-state"), /We’re on it/);
   assert.equal(d.getElementById("requirements-block").hidden, true);
   assert.equal(d.getElementById("results-content").hidden, true);
   // The submitted form is preserved, locked, while the job runs.
@@ -783,7 +783,7 @@ test("the loading screen shows only the current activity", async (t) => {
   t.after(() => dom.window.close());
   const d = dom.window.document;
   await settle(() => Boolean(d.querySelector(".research-loading")));
-  assert.match(text(d, "results-state"), /Finding suppliers/);
+  assert.match(text(d, "results-state"), /We’re on it/);
   assert.equal(d.querySelector(".run-steps"), null);
   assert.equal(d.getElementById("requirements-block").hidden, true);
 });
@@ -864,10 +864,7 @@ test("recommendation phase shows real progress without claiming evaluation is st
   t.after(() => dom.window.close());
   const d = dom.window.document;
   await settle(() => Boolean(d.querySelector(".research-loading")));
-  assert.match(
-    text(d, "results-state"),
-    /Preparing recommendations and email drafts/,
-  );
+  assert.match(text(d, "results-state"), /We’re on it/);
   assert.match(text(d, "comparison-progress"), /Grading is complete/);
   assert.equal(d.getElementById("contact-recommendations").hidden, true);
   assert.equal(d.getElementById("results-content").hidden, true);
@@ -1249,4 +1246,29 @@ test("a signed-out answer sends the browser to the sign-in page", async (t) => {
   dom.virtualConsole?.on("jsdomError", (e) => visited.push(String(e.message)));
   await settle(() => visited.length > 0, "no navigation was attempted");
   assert.match(visited.join(" "), /navigation/i);
+});
+
+test("recommendations show a product link only when available", async (t) => {
+  const job = withRecommendations();
+  job.result.recommendation_report.recommendations[0].product_url =
+    "https://alpha.example/products/m6-20";
+  const dom = setup(server([job]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => d.querySelectorAll(".contact-item").length === 2);
+  const links = [...d.querySelectorAll(".contact-heading a")];
+  const product = links.find((a) => a.textContent.includes("View product"));
+  assert.equal(product.href, "https://alpha.example/products/m6-20");
+  assert.equal(product.target, "_blank");
+  assert.match(product.rel, /noopener/);
+  assert.equal(
+    links.some((a) => a.textContent.includes("Visit supplier website")),
+    false,
+  );
+  assert.equal(
+    d
+      .querySelectorAll(".contact-item")[1]
+      .querySelectorAll(".contact-heading a:not(.contact-compose)").length,
+    0,
+  );
 });

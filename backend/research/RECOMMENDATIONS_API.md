@@ -7,7 +7,7 @@ Read `result.recommendation_report`:
 - `summary`: the agent's contact recommendation and trade-offs.
 - `no_eligible_suppliers`: computed from the original grades, not the agent.
 - `candidate_supplier_ids`: the pool considered by the agent.
-- `recommendations`: up to three entries, ordered by suggested contact priority. Each contains `supplier_id`, `qualification`, `reasons` (`text` and supplier-local `evidence_ids`), `tradeoffs`, `verification_questions` (`criterion_id` and `question`), and `email_draft` (`subject` and `body`). Resolve evidence IDs against the matching entry in `result.suppliers` for source links.
+- `recommendations`: all evidence-backed, non-ineligible candidates (up to the 100-supplier research budget), ordered by eligibility, preference score, evidence coverage, and product fit. Each contains `supplier_id`, `qualification`, `reasons` (`text` and supplier-local `evidence_ids`), `tradeoffs`, `verification_questions` (`criterion_id` and `question`), and `email_draft` (`subject` and `body`). Resolve evidence IDs against the matching entry in `result.suppliers` for source links.
 
 `qualification` is computed by the server: `meets_documented_requirements` for eligible suppliers, otherwise `outreach_only`. Ineligible suppliers and suppliers without evidence or an assessment cannot be recommended. An outreach recommendation does not change the original grades or `recommended_supplier_ids`, which remains the deterministic eligible-only shortlist.
 
