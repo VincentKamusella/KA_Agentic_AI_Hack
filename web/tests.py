@@ -144,7 +144,8 @@ class SignedOutTests(SimpleTestCase):
         response = self.client.get('/')
         self.assertContains(response, 'href="/signup/"')
         self.assertContains(response, 'href="/signin/"')
-        self.assertContains(response, 'Illustrative example')
+        self.assertContains(response, 'SUPPLY NETWORK')
+        self.assertContains(response, 'Supplier locations')
 
     def test_workspace_redirects_to_sign_in(self):
         self.assertRedirects(self.client.get('/app/'), '/signin/?next=/app/', fetch_redirect_response=False)
