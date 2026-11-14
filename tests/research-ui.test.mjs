@@ -788,5 +788,188 @@ test("the progress panel lists the research steps with their real status", async
     "running",
     "waiting",
     "waiting",
+    "waiting",
   ]);
+});
+
+function withRecommendations() {
+  const job = structuredClone(completedJob);
+  job.result.recommendation_report = {
+    summary:
+      "Contact Example Alpha first; keep Example Gamma as an alternative.",
+    no_eligible_suppliers: false,
+    candidate_supplier_ids: ["alpha", "gamma"],
+    recommendations: ["alpha", "gamma"].map((id) => ({
+      supplier_id: id,
+      qualification:
+        id === "alpha" ? "meets_documented_requirements" : "outreach_only",
+      reasons: [
+        {
+          text: `Evidence supports contacting ${id}.`,
+          evidence_ids: [`${id}-about`],
+        },
+      ],
+      tradeoffs: ["Price and delivery dates need confirmation."],
+      verification_questions:
+        id === "gamma"
+          ? [
+              {
+                criterion_id: "quantity",
+                question: "Can you fulfil 2.5 pallets?",
+              },
+            ]
+          : [],
+      email_draft: {
+        subject: `Quotation request for ${id}`,
+        body: "Hello,\n\nPlease quote for 2.5 pallets delivered worldwide.\n\n[Your name]",
+      },
+    })),
+  };
+  return job;
+}
+
+test("saved recommendations show contact priority, qualification, citations and complete copyable drafts", async (t) => {
+  const dom = setup(server([withRecommendations()]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => d.querySelectorAll(".contact-item").length === 2);
+  const section = d.getElementById("contact-recommendations");
+  assert.match(section.textContent, /1\. Example Alpha/);
+  assert.match(section.textContent, /2\. Example Gamma/);
+  assert.match(section.textContent, /Meets documented requirements/);
+  assert.match(section.textContent, /Outreach only/);
+  assert.match(section.textContent, /Can you fulfil 2.5 pallets/);
+  assert.equal(
+    section.querySelector(".contact-citations a").href,
+    "https://alpha.example/about",
+  );
+  assert.ok(section.querySelector(".src-recommendation"));
+  assert.equal(section.querySelector(".src-decision"), null);
+  let copied;
+  Object.defineProperty(dom.window.navigator, "clipboard", {
+    value: {
+      writeText: async (value) => {
+        copied = value;
+      },
+    },
+  });
+  section.querySelector('[data-action="copy"]').click();
+  await settle(() => /Draft copied/.test(text(d, "notice")));
+  assert.equal(
+    copied,
+    "Subject: Quotation request for alpha\n\nHello,\n\nPlease quote for 2.5 pallets delivered worldwide.\n\n[Your name]",
+  );
+  assert.match(text(d, "notice"), /copied/);
+  assert.ok(d.querySelector("#recommendation .src-rules"));
+});
+
+test("recommendation phase shows real progress without claiming evaluation is still running", async (t) => {
+  const job = withRecommendations();
+  job.status = "running";
+  job.result.phase = "recommendation";
+  job.result.recommendation_report = null;
+  const dom = setup(server([job]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => Boolean(d.querySelector(".run-steps")));
+  assert.match(
+    text(d, "results-state"),
+    /Preparing recommendations and email drafts/,
+  );
+  assert.match(text(d, "comparison-progress"), /Grading is complete/);
+  assert.equal(d.getElementById("contact-recommendations").hidden, true);
+  assert.deepEqual(
+    [...d.querySelectorAll(".run-step")].map((n) => n.dataset.status),
+    ["done", "done", "done", "done", "done", "running"],
+  );
+});
+
+test("failed recommendation generation keeps grades and retries with saved evidence", async (t) => {
+  const job = structuredClone(completedJob);
+  job.result.recommendation_report = null;
+  job.result.issues = [
+    {
+      stage: "recommendation",
+      code: "recommendation_unavailable",
+      message: "Provider unavailable",
+      retryable: true,
+    },
+  ];
+  const calls = [];
+  const dom = setup(server([job], calls), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(finished(d));
+  assert.match(text(d, "contact-recommendations"), /could not be prepared/);
+  assert.ok(d.querySelector("#comparison tbody tr"));
+  d.querySelector('[data-action="retry-recommendations"]').click();
+  await settle(() => posts(calls).length === 1);
+  assert.equal(posts(calls)[0].discovery_job_id, jobId);
+  assert.deepEqual(posts(calls)[0].requirements, interpreted);
+});
+
+test("legacy jobs and empty recommendation reports have distinct states", async (t) => {
+  const legacy = setup(server([completedJob]), jobId);
+  t.after(() => legacy.window.close());
+  await settle(finished(legacy.window.document));
+  assert.match(
+    text(legacy.window.document, "contact-recommendations"),
+    /No recommendations saved/,
+  );
+  const job = withRecommendations();
+  job.result.recommendation_report.no_eligible_suppliers = true;
+  job.result.recommendation_report.recommendations = [];
+  const empty = setup(server([job]), jobId);
+  t.after(() => empty.window.close());
+  await settle(finished(empty.window.document));
+  assert.match(
+    text(empty.window.document, "contact-recommendations"),
+    /No supplier was recommended/,
+  );
+  assert.equal(
+    empty.window.document.querySelectorAll(".contact-email").length,
+    0,
+  );
+});
+
+test("recommendation text is untrusted and blocked clipboard access has a manual fallback", async (t) => {
+  const job = withRecommendations();
+  job.result.recommendation_report.summary = '<img src=x onerror="alert(1)">';
+  job.result.recommendation_report.recommendations[0].reasons[0].text =
+    "<script>alert(1)</script>";
+  job.result.suppliers[0].evidence[0].source_url = "javascript:alert(1)";
+  const dom = setup(server([job]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(finished(d));
+  const section = d.getElementById("contact-recommendations");
+  assert.equal(section.querySelector("img, script"), null);
+  assert.equal(section.querySelector('a[href^="javascript:"]'), null);
+  assert.match(section.textContent, /<img/);
+  section.querySelector('[data-action="copy"]').click();
+  await settle(() => /Copying is blocked/.test(text(d, "notice")));
+  assert.equal(d.activeElement.id, "contact-email-0");
+});
+
+test("a failed recommendation retry shows an actionable error and keeps saved results", async (t) => {
+  const dom = setup(
+    async (url, init) =>
+      init?.method === "POST"
+        ? reply({ error: "Research queue is full. Try again later." }, 429)
+        : reply(completedJob),
+    jobId,
+  );
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(finished(d));
+  d.querySelector('[data-action="retry-recommendations"]').click();
+  await settle(() =>
+    Boolean(d.querySelector('#contact-recommendations [role="alert"]')),
+  );
+  assert.match(text(d, "contact-recommendations"), /Research queue is full/);
+  assert.ok(d.querySelector("#comparison tbody tr"));
+  assert.equal(
+    d.querySelector('[data-action="retry-recommendations"]').disabled,
+    false,
+  );
 });

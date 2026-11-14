@@ -42,6 +42,10 @@ const PHASES = {
     "Checking suppliers against your requirements",
     "Each supplier’s source passages are assessed against every requirement.",
   ],
+  recommendation: [
+    "Preparing recommendations and email drafts",
+    "Reviewing the evidence and grades to suggest whom to contact and what to ask.",
+  ],
 };
 const FIELD_ERRORS = {
   "requirements.product": ["product-error", "product"],
@@ -58,6 +62,7 @@ const state = {
   result: null, // latest checkpoint or final result; any part may be missing
   request: null, // what the job was started with
   error: null,
+  recommendationError: null,
   payload: null, // body that created the job, kept for "Retry"
   evidenceJobId: null, // latest completed job with suppliers: reusable evidence
   submitting: false,
@@ -433,6 +438,7 @@ async function startResearch(payload, origin) {
       result: null,
       request: { ...payload, stage: "research" },
       error: null,
+      recommendationError: null,
       payload,
       connection: null,
       editing: false,
@@ -453,7 +459,9 @@ async function startResearch(payload, origin) {
       ].join(" ");
       $("editor-error").hidden = false;
       $("editor-error").focus();
-    } else state.error = e.message;
+    } else if (origin === "recommendation")
+      state.recommendationError = e.message;
+    else state.error = e.message;
     announce("The research could not be started.");
   } finally {
     state.submitting = false;
@@ -548,6 +556,7 @@ function render() {
   renderResultsState();
   renderRequirements();
   renderResults();
+  renderContactRecommendations();
   renderPerformance();
   renderNotes();
   renderCoverage();
@@ -620,6 +629,8 @@ function renderSummary() {
 function progressDetail() {
   const { coverage } = state.result || {};
   const phase = state.result?.phase;
+  if (phase === "recommendation")
+    return `${plural(assessmentsOf().length, "supplier", "suppliers")} assessed. Your grades are available below.`;
   if (phase === "evaluation" && suppliersOf().length)
     return `${assessmentsOf().length} of ${plural(suppliersOf().length, "supplier", "suppliers")} assessed.`;
   if (coverage?.queries)
@@ -956,6 +967,195 @@ function clarificationDraft(supplier, unknown, r) {
 
 const detailTargets = new Map();
 
+function renderContactRecommendations() {
+  const host = $("contact-recommendations");
+  const report = state.result?.recommendation_report;
+  const issue = (state.result?.issues || []).find(
+    (i) => i.stage === "recommendation",
+  );
+  host.hidden =
+    state.status !== "completed" ||
+    state.restoring ||
+    (!report && !suppliersOf().length && !issue);
+  if (host.hidden) return;
+  const expanded = new Set(
+    [...host.querySelectorAll("details[open]")].map((node) => node.dataset.key),
+  );
+  host.replaceChildren(
+    h(
+      "div",
+      { class: "block-head" },
+      h("h2", { id: "contact-title", text: "Who to contact" }),
+      sourceTag("recommendation"),
+    ),
+  );
+  if (!report) {
+    if (state.recommendationError)
+      host.append(
+        h("p", {
+          class: "note note-error",
+          role: "alert",
+          text: state.recommendationError,
+        }),
+      );
+    host.append(
+      panel({
+        title: issue
+          ? "Recommendations could not be prepared"
+          : "No recommendations saved for this run",
+        text: "Your research and grades are available below. Recheck the saved evidence to prepare recommendations and email drafts.",
+        actions: state.evidenceJobId
+          ? [
+              actionButton(
+                "retry-recommendations",
+                "Prepare recommendations",
+                true,
+              ),
+            ]
+          : [],
+      }),
+    );
+    return;
+  }
+  host.append(h("p", { class: "contact-summary", text: report.summary }));
+  if (report.no_eligible_suppliers)
+    host.append(
+      h("p", {
+        class: "contact-warning",
+        text: "No supplier meets all documented must-haves. These are outreach suggestions, not confirmed matches.",
+      }),
+    );
+  if (!report.recommendations.length) {
+    host.append(
+      h("p", {
+        class: "help",
+        text: "No supplier was recommended for contact. Review the evidence or refine your brief before searching again.",
+      }),
+      linkButton("brief", "Edit brief"),
+    );
+    return;
+  }
+  host.append(
+    h("p", {
+      class: "help",
+      text: "Suggested contact order. The eligibility grades and shortlist below remain unchanged. Review each draft before copying it into your email; nothing is sent.",
+    }),
+  );
+  const list = h("ol", { class: "contact-list" });
+  report.recommendations.forEach((recommendation, index) => {
+    const supplier = suppliersOf().find(
+      (s) => s.supplier_id === recommendation.supplier_id,
+    );
+    if (!supplier) return;
+    const evidence = supplier.evidence || [];
+    const article = h("li", { class: "contact-item" });
+    const qualified =
+      recommendation.qualification === "meets_documented_requirements";
+    article.append(
+      h(
+        "div",
+        { class: "contact-heading" },
+        h("h3", { text: `${index + 1}. ${supplier.name}` }),
+        h(
+          "span",
+          { class: `chip chip-${qualified ? "pass" : "unknown"}` },
+          icon(qualified ? "check" : "unknown"),
+          qualified ? "Meets documented requirements" : "Outreach only",
+        ),
+      ),
+    );
+    article.append(
+      h(
+        "ul",
+        { class: "contact-reasons" },
+        recommendation.reasons.map((reason) =>
+          h(
+            "li",
+            null,
+            h("p", { text: reason.text }),
+            h(
+              "span",
+              { class: "contact-citations" },
+              reason.evidence_ids.map((id) => {
+                const sourceIndex = evidence.findIndex((e) => e.id === id);
+                return sourceIndex < 0
+                  ? null
+                  : externalLink(
+                      evidence[sourceIndex].source_url,
+                      `Source ${sourceIndex + 1}`,
+                    );
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (recommendation.tradeoffs.length)
+      article.append(
+        h("h4", { text: "Trade-offs" }),
+        h(
+          "ul",
+          null,
+          recommendation.tradeoffs.map((text) => h("li", { text })),
+        ),
+      );
+    if (recommendation.verification_questions.length) {
+      const key = `${supplier.supplier_id}-questions`;
+      article.append(
+        h(
+          "details",
+          { "data-key": key, open: expanded.has(key) },
+          h("summary", {
+            text: `Questions to confirm (${recommendation.verification_questions.length})`,
+          }),
+          h(
+            "ul",
+            null,
+            recommendation.verification_questions.map((q) =>
+              h("li", { text: q.question }),
+            ),
+          ),
+        ),
+      );
+    }
+    const key = `${supplier.supplier_id}-email`;
+    const id = `contact-email-${index}`;
+    const draft = recommendation.email_draft;
+    article.append(
+      h(
+        "details",
+        { class: "contact-email", "data-key": key, open: expanded.has(key) },
+        h("summary", { text: "Review email draft" }),
+        h(
+          "div",
+          { class: "block-head" },
+          h("label", { htmlFor: id, text: `Email draft for ${supplier.name}` }),
+          h(
+            "button",
+            {
+              type: "button",
+              class: "btn btn-outline-secondary btn-sm btn-icon",
+              "data-action": "copy",
+              "data-target": id,
+            },
+            icon("copy"),
+            h("span", { text: "Copy draft" }),
+          ),
+        ),
+        h("textarea", {
+          id,
+          class: "form-control",
+          readOnly: true,
+          rows: 12,
+          value: `Subject: ${draft.subject}\n\n${draft.body}`,
+        }),
+      ),
+    );
+    list.append(article);
+  });
+  host.append(list);
+}
+
 function renderSummaryPanel(context) {
   const { suppliers, assessments, rank, criteria, preferenceCount, score } =
     context;
@@ -1107,7 +1307,9 @@ function renderResults() {
   const progress = $("comparison-progress");
   progress.hidden = done;
   progress.textContent = busy()
-    ? `Evaluation is still running: ${all.length} of ${plural(suppliersOf().length, "supplier", "suppliers")} assessed so far. The shortlist appears when it finishes.`
+    ? state.result?.phase === "recommendation"
+      ? "Grading is complete. Recommendations and email drafts are being prepared."
+      : `Evaluation is still running: ${all.length} of ${plural(suppliersOf().length, "supplier", "suppliers")} assessed so far. The shortlist appears when it finishes.`
     : "Research stopped before every supplier was assessed. This comparison is incomplete and no shortlist was built.";
 
   /* Comparison matrix */
@@ -1404,8 +1606,13 @@ async function copyDraft(button) {
     await navigator.clipboard.writeText(field.value);
     copied = true;
   } catch {
+    field.focus();
     field.select();
-    copied = document.execCommand("copy");
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
   }
   const label = button.querySelector("span");
   label.textContent = copied ? "Copied" : "Select the text and copy it";
@@ -1421,6 +1628,10 @@ async function copyDraft(button) {
 
 const DECISION_THRESHOLD = 0.85;
 const SOURCES = {
+  recommendation: [
+    "Recommendation agent",
+    "Model-written recommendations and drafts based on saved grades and source evidence",
+  ],
   decision: [
     "Decision model",
     "Produced by the Gemini Decisions model (gemini-decision-1)",
@@ -1437,7 +1648,7 @@ function sourceTag(kind, title) {
   return h(
     "span",
     { class: `src-tag src-${kind}`, title: title || SOURCES[kind][1] },
-    icon(`src-${kind}`),
+    icon(kind === "recommendation" ? "src-search" : `src-${kind}`),
     h("span", { text: SOURCES[kind][0] }),
   );
 }
@@ -1540,13 +1751,19 @@ function decisionAnswers(decisions, evidence) {
 
 /* The job's real phases as a step list; nothing here is simulated. */
 function runSteps(phase) {
-  const reached = ["interpreting", "discovery", "evaluation"].indexOf(phase);
+  const reached = [
+    "interpreting",
+    "discovery",
+    "evaluation",
+    "recommendation",
+  ].indexOf(phase);
   const steps = [
     ["Understand your requirements", 0, null],
     ["Search public sources", 1, "search"],
     ["Retrieve supplier pages and group passages", 1, "code"],
     ["Assess every requirement against every excerpt", 2, "decision"],
     ["Apply must-haves and rank", 2, "rules"],
+    ["Recommend contacts and draft emails", 3, "recommendation"],
   ];
   return h(
     "ol",
@@ -2644,6 +2861,11 @@ document.addEventListener("click", (event) => {
   if (!button || button.disabled) return;
   const action = button.dataset.action;
   if (action === "reset") reset();
+  else if (action === "retry-recommendations" && !busy() && state.evidenceJobId)
+    startResearch(
+      { requirements: requirementsOf(), discovery_job_id: state.evidenceJobId },
+      "recommendation",
+    );
   else if (action === "copy") copyDraft(button);
   else if (action === "adjust") openEditor();
   else if (action === "suggest") suggestRequirements();

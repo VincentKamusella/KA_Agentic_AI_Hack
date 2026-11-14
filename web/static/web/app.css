@@ -1130,6 +1130,87 @@ h2 {
 
 /* ---------- 3 · Shortlist ---------- */
 
+.contact-recommendations {
+  overflow-wrap: anywhere;
+}
+.contact-summary {
+  max-width: 72ch;
+  margin: 12px 0;
+}
+.contact-warning {
+  color: var(--qp-unknown);
+  max-width: 72ch;
+}
+.contact-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+}
+.contact-item {
+  padding: 24px;
+  border: 1px solid var(--qp-line);
+  border-radius: 14px;
+  background: var(--qp-surface);
+  min-width: 0;
+}
+.contact-recommendations .block-head {
+  flex-wrap: wrap;
+}
+.contact-heading .chip {
+  white-space: normal;
+}
+.contact-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+}
+.contact-heading h3 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+.contact-item h4 {
+  margin: 18px 0 6px;
+  font-size: 0.9375rem;
+}
+.contact-item ul {
+  padding-left: 20px;
+  max-width: 75ch;
+}
+.contact-item li + li {
+  margin-top: 8px;
+}
+.contact-reasons p {
+  margin-bottom: 4px;
+}
+.contact-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 0.875rem;
+}
+.contact-citations a {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.contact-item details {
+  margin-top: 16px;
+}
+.contact-item summary {
+  padding: 8px 0;
+}
+.contact-email .block-head {
+  margin: 12px 0;
+}
+.contact-email textarea {
+  line-height: 1.6;
+}
+
 .recommendation {
   margin-top: 24px;
   padding: 28px;
@@ -1725,6 +1806,9 @@ h2 {
   }
   main {
     padding: 20px 16px 72px;
+  }
+  .contact-item {
+    padding: 20px 16px;
   }
   .area-controls {
     grid-template-columns: minmax(0, 1fr);
