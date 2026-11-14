@@ -1951,40 +1951,40 @@ button.record-title:hover {
 .loading-copy {
   position: relative;
   z-index: 1;
-  max-width: 38rem;
+  width: 100%;
+  max-width: 32rem;
   padding: 24px;
   background: rgba(7, 9, 13, 0.88);
   border-radius: 16px;
 }
 .research-loading h2 {
-  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-size: 1.375rem;
   max-width: 28ch;
   line-height: 1.2;
 }
 .research-loading p {
   max-width: 52ch;
+  margin: 8px 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 .loading-status {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px 24px;
-  margin-top: 24px;
-  font-size: 0.875rem;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 20px;
+  color: var(--qp-muted);
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 .loading-status .loading-count {
-  color: var(--qp-light);
-  font-weight: 500;
+  font-weight: 400;
 }
 .loading-status .elapsed {
   color: var(--qp-muted);
   white-space: nowrap;
-}
-.research-loading .loading-note {
-  margin: 8px 0 0;
-  color: var(--qp-muted);
-  font-size: 0.8125rem;
 }
 .loading-preview {
   position: absolute;

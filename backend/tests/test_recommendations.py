@@ -33,6 +33,28 @@ def provider_response(items):
 
 
 class RecommendationTests(TestCase):
+    def test_email_has_one_greeting_and_does_not_repeat_generated_requirements(self):
+        from backend.domain.contracts import Criterion
+        from backend.research.recommendations import email_draft, RecommendationDraft
+        requirements = Requirements(product='M6 x 20 mm screws', quantity=500,
+                                    delivery_country='Germany', other_requirements='Steel')
+        requirements.criteria = [
+            Criterion(id='product', kind='mandatory', description=requirements.product),
+            Criterion(id='quantity', kind='mandatory', description='Can fulfil an order of 500 pieces.'),
+            Criterion(id='material', kind='mandatory', description='Steel'),
+            Criterion(id='coating', kind='preference', description='Zinc plated'),
+        ]
+        raw = dict(draft(), email_intro='Hello,\n\nHello, please quote.\nBest regards,\nFake sender')
+        body = email_draft(requirements, RecommendationDraft.model_validate(raw)).body
+        self.assertEqual(body.count('Hello,'), 1)
+        self.assertEqual(body.count(requirements.product), 1)
+        self.assertEqual(body.count('Steel'), 1)
+        self.assertNotIn('Can fulfil an order', body)
+        self.assertNotIn('[mandatory]', body)
+        self.assertNotIn('Fake sender', body)
+        self.assertIn('where possible:', body)
+        self.assertIn('Zinc plated', body)
+
     def setUp(self):
         fixture = demo_fixture()
         self.requirements = Requirements.model_validate(fixture['request']['requirements'])
@@ -57,6 +79,45 @@ class RecommendationTests(TestCase):
         self.assertNotIn('tools', payload)
         self.assertIn('alpha-about', payload['input'])
 
+    def test_all_applicable_suppliers_are_batched_and_ranked_without_truncation(self):
+        supplier = self.result.suppliers[0]
+        assessment = next(a for a in self.result.assessments if a.supplier_id == supplier.supplier_id)
+        self.result.suppliers = [supplier.model_copy(deep=True, update={
+            'supplier_id': f'supplier-{i:02}', 'fit_score': float(i),
+        }) for i in range(13)]
+        self.result.assessments = [assessment.model_copy(deep=True, update={
+            'supplier_id': s.supplier_id,
+        }) for s in self.result.suppliers]
+        from backend.domain.contracts import EvaluationResult
+        from backend.research.pipeline import shortlist
+        ranked = shortlist(self.result.suppliers, EvaluationResult(assessments=self.result.assessments))
+        self.assertEqual(len(ranked.recommended_supplier_ids), 13)
+        self.assertEqual(ranked.recommended_supplier_ids[0], 'supplier-12')
+        async def respond(endpoint, payload):
+            candidates = json.loads(payload['input'])['candidates']
+            self.assertLessEqual(len(candidates), 6)
+            items = [dict(draft(), supplier_id=c['supplier_id']) for c in reversed(candidates)]
+            return provider_response(items)
+        self.client.post.side_effect = respond
+        report = self.run_agent()
+        self.assertEqual(self.client.post.await_count, 3)
+        self.assertEqual(len(report.candidate_supplier_ids), 13)
+        self.assertEqual(report.candidate_supplier_ids[0], 'supplier-12')
+        self.assertEqual(report.candidate_supplier_ids[-1], 'supplier-00')
+        self.assertEqual([r.supplier_id for r in report.recommendations], report.candidate_supplier_ids)
+
+    def test_product_link_resolves_only_supplied_supplier_evidence(self):
+        items = [dict(draft(), product_evidence_id='alpha-about'), draft('gamma')]
+        self.client.post.return_value = provider_response(items)
+        report = self.run_agent()
+        expected = self.result.suppliers[0].evidence[0].source_url
+        self.assertEqual(report.recommendations[0].product_url, expected)
+        self.assertIsNone(report.recommendations[1].product_url)
+        items[0]['product_evidence_id'] = 'gamma-about'
+        self.client.post.return_value = provider_response(items)
+        with self.assertRaises(GeminiError):
+            self.run_agent()
+
     def test_email_contains_brief_and_every_unresolved_question(self):
         self.requirements.quantity = 2.5
         self.requirements.quantity_unit = 'kg'
@@ -76,7 +137,7 @@ class RecommendationTests(TestCase):
         missing_question['verification_questions'] = []
         invented_question = draft()
         invented_question['verification_questions'] = [{'criterion_id': 'invented', 'question': 'Why?'}]
-        for items in ([draft('missing')], [draft('beta')], [draft(), draft()],
+        for items in ([draft()], [draft('missing')], [draft('beta')], [draft(), draft()],
                       [bad_citation], [missing_question], [invented_question]):
             with self.subTest(items=items), self.assertRaises(GeminiError):
                 self.client.post.return_value = provider_response(items)
@@ -125,9 +186,9 @@ class RecommendationTests(TestCase):
 
     def test_transient_provider_failure_retries_once(self):
         self.client.post.side_effect = [GeminiError('Busy', status_code=429, retry_after=100),
-                                        provider_response([draft()])]
+                                        provider_response([draft(), draft('gamma')])]
         with patch('backend.research.recommendations.asyncio.sleep', new_callable=AsyncMock) as sleep:
-            self.assertEqual(len(self.run_agent().recommendations), 1)
+            self.assertEqual(len(self.run_agent().recommendations), 2)
         self.assertEqual(self.client.post.await_count, 2)
         sleep.assert_awaited_once_with(10)
 

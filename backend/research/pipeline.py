@@ -3,10 +3,11 @@ from backend.domain.contracts import RecommendRequest, RecommendResponse
 
 
 def shortlist(suppliers, evaluation, issues=()):
+    fit = {s.supplier_id: s.fit_score if s.fit_score is not None else -1 for s in suppliers}
     eligible = sorted((a for a in evaluation.assessments if a.eligibility == "eligible"),
-                      key=lambda a: (-a.preference_score, -a.evidence_coverage, a.supplier_id))
+                      key=lambda a: (-a.preference_score, -a.evidence_coverage, -fit.get(a.supplier_id, -1), a.supplier_id))
     return RecommendResponse(suppliers=suppliers, assessments=evaluation.assessments,
-                             recommended_supplier_ids=[a.supplier_id for a in eligible[:3]],
+                             recommended_supplier_ids=[a.supplier_id for a in eligible],
                              issues=[*issues, *evaluation.issues],
                              decision_metrics=evaluation.metrics)
 

@@ -54,7 +54,7 @@ class DiscoveryTests(StoreCase):
             candidates[0].model_dump(mode='json')
         self.assertEqual(directories, ['https://thomasnet.com/products'])
 
-    def test_multi_query_deduplication_saturation_and_real_evidence(self):
+    def test_thin_pool_uses_full_budget_and_keeps_real_evidence(self):
         class Client:
             calls = 0
             async def post(self, *args):
@@ -63,9 +63,9 @@ class DiscoveryTests(StoreCase):
         client, crawler = Client(), FakeCrawler()
         service = GeminiDiscovery(client, store=self.store, crawler=crawler)
         result = asyncio.run(service.discover_suppliers(requirements(), options=DiscoveryOptions(search_concurrency=1)))
-        self.assertEqual(client.calls, 4)
+        self.assertEqual(client.calls, 8)
         self.assertEqual(len(result.suppliers), 2)
-        self.assertEqual(result.coverage.stop_reason, 'diminishing_returns')
+        self.assertEqual(result.coverage.stop_reason, 'query_budget')
         self.assertFalse(result.coverage.exhaustive)
         self.assertEqual(result.coverage.queries[1].duplicate_suppliers, 2)
         self.assertEqual(result.coverage.researched, 2)
@@ -74,8 +74,103 @@ class DiscoveryTests(StoreCase):
         self.assertTrue(all(e.kind == 'page' for s in result.suppliers for e in s.evidence))
         self.assertFalse(any('external.test' in url for url in crawler.calls))
         again = asyncio.run(service.discover_suppliers(requirements(), options=DiscoveryOptions(search_concurrency=1)))
-        self.assertEqual(client.calls, 4)
+        self.assertEqual(client.calls, 8)
         self.assertTrue(all(q.cached for q in again.coverage.queries))
+
+    def test_recovery_search_adds_product_leads_after_inaccessible_candidates(self):
+        class Client:
+            calls = 0
+            prompts = []
+            async def post(self, endpoint, payload):
+                self.calls += 1
+                self.prompts.append(payload['input'])
+                return response(['blocked.test'] if self.calls <= 6 else [f'product{self.calls}.test'])
+
+        class Crawler(FakeCrawler):
+            def fetch(self, url):
+                if 'blocked.test' in url:
+                    raise CrawlError('Blocked by robots.txt')
+                return super().fetch(url)
+
+        client = Client()
+        result = asyncio.run(GeminiDiscovery(client, store=self.store, crawler=Crawler()).discover_suppliers(
+            requirements(), options=DiscoveryOptions(search_concurrency=1)))
+        self.assertEqual(client.calls, 8)
+        self.assertEqual(len(result.suppliers), 3)
+        self.assertEqual(sum(bool(s.evidence) for s in result.suppliers), 2)
+        self.assertEqual(result.coverage.researched, 3)
+        self.assertEqual(result.coverage.pending, 0)
+        self.assertEqual(result.coverage.queries[-1].source_type, 'product_recovery')
+        self.assertIn('ordering information', client.prompts[-1])
+
+    def test_recovery_can_repair_existing_supplier_at_candidate_limit(self):
+        class Client:
+            calls = 0
+            async def post(self, *args):
+                self.calls += 1
+                data = response(['maker.test'])
+                if self.calls > 4:
+                    data['steps'][1]['content'][0]['annotations'][0]['url'] = 'https://maker.test/catalog'
+                return data
+
+        class Crawler(FakeCrawler):
+            def fetch(self, url):
+                if not url.endswith('/catalog'):
+                    raise CrawlError('Source returned HTTP 404.')
+                return super().fetch(url)
+
+        client = Client()
+        result = asyncio.run(GeminiDiscovery(client, store=self.store, crawler=Crawler()).discover_suppliers(
+            requirements(), options=DiscoveryOptions(search_concurrency=1, max_suppliers=1)))
+        self.assertEqual(client.calls, 5)
+        self.assertEqual(len(result.suppliers), 1)
+        self.assertEqual(len(result.suppliers[0].evidence), 1)
+        self.assertEqual(result.coverage.researched, 1)
+        self.assertEqual(result.coverage.source_pages, 1)
+        self.assertEqual(result.coverage.pending, 0)
+
+    def test_saturation_requires_a_substantial_pool_and_stays_bounded(self):
+        class Client:
+            calls = 0
+            async def post(self, *args):
+                self.calls += 1
+                return response([f'maker{i}.test' for i in range(12)])
+        client = Client()
+        result = asyncio.run(GeminiDiscovery(client, store=self.store, crawler=FakeCrawler()).discover_suppliers(
+            requirements(), options=DiscoveryOptions(search_concurrency=1)))
+        self.assertEqual(client.calls, 4)
+        self.assertEqual(len(result.suppliers), 12)
+        self.assertEqual(result.coverage.stop_reason, 'diminishing_returns')
+
+    def test_failed_product_link_does_not_exhaust_evidence_budget(self):
+        class Crawler(FakeCrawler):
+            def fetch(self, url):
+                if url.endswith('/broken'):
+                    self.calls.append(url)
+                    raise CrawlError('Source returned HTTP 404.')
+                return super().fetch(url)
+        supplier = SupplierEvidence(supplier_id='maker', name='Maker', website='https://maker.test',
+                                    source_urls=['https://maker.test/broken'])
+        crawler = Crawler()
+        result, issues = crawl_supplier(crawler, supplier, requirements(),
+                                       DiscoveryOptions(max_pages_per_supplier=1))
+        self.assertEqual(len(result.evidence), 1)
+        self.assertEqual(len(crawler.calls), 2)
+        self.assertEqual(len(issues), 1)
+
+    def test_repeated_content_has_a_bounded_fetch_budget(self):
+        class Crawler(FakeCrawler):
+            def fetch(self, url):
+                page = super().fetch(url)
+                page.content_hash = 'same-content'
+                page.links = [f'/catalog/{len(self.calls)}/{i}' for i in range(10)]
+                return page
+        crawler = Crawler()
+        supplier = SupplierEvidence(supplier_id='maker', name='Maker', website='https://maker.test')
+        result, _ = crawl_supplier(crawler, supplier, requirements(),
+                                  DiscoveryOptions(max_pages_per_supplier=2, max_depth=3))
+        self.assertEqual(len(result.evidence), 1)
+        self.assertEqual(len(crawler.calls), 5)
 
     def test_failed_searches_preserve_candidates_and_do_not_mean_saturation(self):
         class Client:

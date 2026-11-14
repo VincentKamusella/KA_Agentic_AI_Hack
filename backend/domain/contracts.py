@@ -261,6 +261,7 @@ class EmailDraft(Contract):
 
 
 class SupplierRecommendation(Contract):
+    product_url: HttpUrl | None = None
     supplier_id: str
     qualification: Literal["meets_documented_requirements", "outreach_only"]
     reasons: list[RecommendationReason] = Field(min_length=1, max_length=5)
@@ -272,15 +273,15 @@ class SupplierRecommendation(Contract):
 class RecommendationReport(Contract):
     summary: RecommendationText
     no_eligible_suppliers: bool
-    candidate_supplier_ids: list[str] = Field(max_length=12)
+    candidate_supplier_ids: list[str] = Field(max_length=100)
     # Ordered by the agent's suggested contact priority, separate from the shortlist.
-    recommendations: list[SupplierRecommendation] = Field(max_length=3)
+    recommendations: list[SupplierRecommendation] = Field(max_length=100)
 
 
 class RecommendResponse(Contract):
     suppliers: list[SupplierEvidence]
     assessments: list[SupplierAssessment]
-    recommended_supplier_ids: list[str] = Field(max_length=3)
+    recommended_supplier_ids: list[str] = Field(max_length=100)
     issues: list[PipelineIssue] = Field(default_factory=list)
     decision_metrics: DecisionMetrics | None = None
     recommendation_report: RecommendationReport | None = None

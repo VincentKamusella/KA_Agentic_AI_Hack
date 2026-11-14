@@ -6,6 +6,8 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
+from django.conf import settings
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from django.db import DatabaseError
@@ -34,29 +36,90 @@ def stop_process(process):
             process.wait()
 
 
-def supervise(store, claim, stopping):
-    process = None
+@dataclass
+class RunningJob:
+    claim: dict
+    process: subprocess.Popen
+    started: float
+    last_heartbeat: float
+
+
+def launch(store, claim):
     try:
         process = subprocess.Popen([
             sys.executable, '-m', 'web.manage', 'research_worker',
             '--execute', claim['id'], '--lease', claim['lease_id'],
         ], start_new_session=True)
-        started = last_heartbeat = time.monotonic()
-        while process.poll() is None and not stopping.wait(1):
-            now = time.monotonic()
-            if now - started >= JOB_TIMEOUT_SECONDS:
-                logger.warning('Research job exceeded worker deadline id=%s', claim['id'])
-                break
-            if now - last_heartbeat >= HEARTBEAT_SECONDS:
-                if not store.renew(claim['id'], claim['lease_id']):
-                    break
-                last_heartbeat = now
-    finally:
-        if process is not None:
-            stop_process(process)
-        # Completed/failed jobs no longer own a lease; release is then a no-op.
-        # If PostgreSQL is unavailable, lease expiry handles recovery instead.
+    except OSError:
         store.release(claim['id'], claim['lease_id'])
+        raise
+    now = time.monotonic()
+    return RunningJob(claim, process, now, now)
+
+
+def keep_running(store, job):
+    if job.process.poll() is not None:
+        return False
+    now = time.monotonic()
+    if now - job.started >= JOB_TIMEOUT_SECONDS:
+        logger.warning('Research job exceeded worker deadline id=%s', job.claim['id'])
+        return False
+    if now - job.last_heartbeat >= HEARTBEAT_SECONDS:
+        if not store.renew(job.claim['id'], job.claim['lease_id']):
+            return False
+        job.last_heartbeat = now
+    return True
+
+
+def finish(store, job):
+    try:
+        stop_process(job.process)
+    finally:
+        # Completed jobs no longer own a lease. If the database is unavailable,
+        # lease expiry recovers unfinished work.
+        store.release(job.claim['id'], job.claim['lease_id'])
+
+
+def supervise(store, claim, stopping):
+    job = launch(store, claim)
+    try:
+        while not stopping.is_set() and keep_running(store, job):
+            stopping.wait(1)
+    finally:
+        finish(store, job)
+
+
+def supervise_pool(store, stopping):
+    """Poll isolated children together so a slow search cannot block the queue."""
+    active = []
+    try:
+        while not stopping.is_set():
+            for job in active[:]:
+                try:
+                    if keep_running(store, job):
+                        continue
+                except (DatabaseError, OSError):
+                    logger.exception('Research job supervision failed id=%s', job.claim['id'])
+                try:
+                    finish(store, job)
+                except (DatabaseError, OSError):
+                    logger.exception('Research job cleanup failed id=%s', job.claim['id'])
+                active.remove(job)
+            try:
+                while not stopping.is_set() and len(active) < settings.RESEARCH_MAX_RUNNING:
+                    claim = store.claim()
+                    if claim is None:
+                        break
+                    active.append(launch(store, claim))
+            except (DatabaseError, OSError):
+                logger.exception('Research worker could not claim or launch a job')
+            stopping.wait(1 if active else 2)
+    finally:
+        for job in active:
+            try:
+                finish(store, job)
+            except (DatabaseError, OSError):
+                logger.exception('Research job cleanup failed id=%s', job.claim['id'])
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -84,22 +147,14 @@ def run_worker(*, once=False, execute=None, lease=None, health_port=0, write=pri
     previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
     for sig in previous:
         signal.signal(sig, lambda *_: stopping.set())
-    write('Research worker ready.')
+    write(f'Research worker ready (up to {settings.RESEARCH_MAX_RUNNING} concurrent jobs).')
     try:
-        while not stopping.is_set():
-            try:
-                claim = store.claim()
-                if claim:
-                    supervise(store, claim, stopping)
-                elif not once:
-                    stopping.wait(2)
-            except (DatabaseError, OSError):
-                logger.exception('Research worker could not process the queue')
-                if once:
-                    raise
-                stopping.wait(5)
-            if once:
-                break
+        if once:
+            claim = store.claim()
+            if claim:
+                supervise(store, claim, stopping)
+        else:
+            supervise_pool(store, stopping)
     finally:
         if health:
             health.shutdown()

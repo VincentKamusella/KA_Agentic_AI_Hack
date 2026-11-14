@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 
 from django.utils import timezone
+from django.test import override_settings
 
 from backend.models import ResearchCacheEntry, ResearchJob
 from backend.persistence.store import ResearchStore
@@ -39,6 +40,7 @@ class ResearchTests(StoreCase):
         self.assertEqual(self.store.get(job)['status'], 'running')
         self.assertIsNotNone(self.store.get(job)['result'])
 
+    @override_settings(RESEARCH_MAX_RUNNING=2)
     def test_admission_control_and_release(self):
         for _ in range(3):
             self.store.create({})

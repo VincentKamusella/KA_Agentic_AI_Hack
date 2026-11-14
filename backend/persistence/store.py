@@ -4,12 +4,12 @@ import uuid
 from datetime import timedelta
 from functools import wraps
 
+from django.conf import settings
 from django.db import close_old_connections, connections, transaction
 from django.utils import timezone
 
 LEASE_SECONDS = 60
 MAX_ATTEMPTS = 3
-MAX_RUNNING = 2
 MAX_PENDING = 100
 
 
@@ -56,7 +56,7 @@ class ResearchStore:
                 status='failed', error='Research stopped after three worker attempts. Start a new job to retry.',
                 lease_id=None, lease_expires_at=None, updated_at=now)
             expired.update(status='queued', lease_id=None, lease_expires_at=None, updated_at=now)
-            if ResearchJob.objects.filter(status='running').count() >= MAX_RUNNING:
+            if ResearchJob.objects.filter(status='running').count() >= settings.RESEARCH_MAX_RUNNING:
                 return None
             job = ResearchJob.objects.select_for_update(skip_locked=True).filter(status='queued').order_by('created_at', 'id').first()
             if job is None:

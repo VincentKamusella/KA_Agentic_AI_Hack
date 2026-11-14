@@ -37,28 +37,6 @@ const SUSTAINABILITY = {
   bad: ["Bad", "fail", 0],
 };
 const KINDS = { mandatory: "Must have", preference: "Nice to have" };
-const PHASES = {
-  queued: [
-    "Waiting for a research worker",
-    "Your search is queued and starts as soon as a worker is free.",
-  ],
-  interpreting: [
-    "Understanding your requirements",
-    "Your brief is being turned into must-haves and nice-to-haves.",
-  ],
-  discovery: [
-    "Finding suppliers",
-    "Searching across sources and languages, then retrieving supplier pages.",
-  ],
-  evaluation: [
-    "Checking suppliers against your requirements",
-    "Each supplier’s source passages are assessed against every requirement.",
-  ],
-  recommendation: [
-    "Preparing recommendations and email drafts",
-    "Reviewing the evidence and grades to suggest whom to contact and what to ask.",
-  ],
-};
 const FIELD_ERRORS = {
   "requirements.product": ["product-error", "product"],
   "requirements.quantity": ["quantity-error", "quantity"],
@@ -698,22 +676,9 @@ function renderResultsState() {
       }),
     );
   if (busy()) {
-    const phase =
-      state.status === "running"
-        ? PHASES[state.result?.phase]
-          ? state.result.phase
-          : "interpreting"
-        : "queued";
-    const crawling =
-      phase === "discovery" &&
-      ["query_budget", "diminishing_returns"].includes(
-        state.result?.coverage?.stop_reason,
-      );
     const loading = panel({
-      title: crawling ? "Reading supplier websites" : PHASES[phase][0],
-      text: crawling
-        ? "Gathering the evidence for your shortlist."
-        : PHASES[phase][1],
+      title: "We’re on it",
+      text: "We’re working on your supplier shortlist. You can leave this page and come back anytime.",
     });
     loading.classList.add("research-loading");
     const candidates = suppliersOf().slice(-3);
@@ -748,19 +713,12 @@ function renderResultsState() {
       status.append(
         h("span", {
           class: "loading-count",
-          text: `${plural(count, "supplier", "suppliers")} discovered`,
+          text: `${plural(count, "potential supplier", "potential suppliers")} found`,
         }),
       );
     if (state.startedAt)
       status.append(h("span", { class: "elapsed", text: elapsedText() }));
     if (status.childNodes.length) copy.append(status);
-    if (count)
-      copy.append(
-        h("p", {
-          class: "loading-note",
-          text: "Research in progress. This is not yet a final shortlist.",
-        }),
-      );
     loading.append(previews, copy);
     return box.append(loading);
   }
@@ -1163,6 +1121,10 @@ function renderContactRecommendations() {
         ),
       ),
     );
+    if (recommendation.product_url)
+      article
+        .querySelector(".contact-heading")
+        .append(externalLink(recommendation.product_url, "View product"));
     const reasons = article.querySelector(".contact-reasons");
     const strengths = h(
       "section",
