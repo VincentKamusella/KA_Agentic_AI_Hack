@@ -21,7 +21,11 @@ CONFIDENCE_THRESHOLD = 0.85  # Provisional hackathon threshold; not calibrated o
 logger = logging.getLogger(__name__)
 DECISION_MODEL = "gemini-decision-1"
 # Discovery's derived fields must not anchor criterion-level decisions.
-SCREEN_FIELDS = {"fit_rank", "fit_score", "fit_result", "fit_confidence", "fit_probabilities", "price"}
+SCREEN_FIELDS = {
+    "fit_rank", "fit_score", "fit_result", "fit_confidence", "fit_probabilities", "price",
+    "sustainability_rating", "sustainability_score", "sustainability_confidence",
+    "sustainability_probabilities", "sustainability_evidence", "sustainability_note",
+}
 DISCOVERY_RUBRIC = [
     "Irrelevant, directory/marketplace, or no evidence matching the discovery prompt.",
     "Weak or indirect match to the discovery prompt.",

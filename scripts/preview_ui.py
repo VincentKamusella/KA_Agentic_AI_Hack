@@ -129,11 +129,20 @@ def run_job(job_id, payload):
         fixture = demo_fixture()["response"]["suppliers"]
         fit = {"alpha": ("pass", 0.93, 88, "from EUR 0.42 per piece"), "beta": ("pass", 0.71, 61, None),
                "gamma": ("unknown", 0.55, 30, None)}
+        sust = {
+            "alpha": ("good", 91.0, 0.94, "ISO 14001 certified and 80% recycled steel sourcing."),
+            "beta": ("ok", 52.0, 0.81, "General environmental policy stated; no third-party audit."),
+            "gamma": ("bad", 15.0, 0.88, "No public sustainability commitments or certifications found."),
+        }
         suppliers = [SupplierEvidence.model_validate({
             **supplier, "crawl_status": "partial", "discovered_by": ["preview search"],
             "fit_rank": index, "fit_result": fit[supplier["supplier_id"]][0],
             "fit_confidence": fit[supplier["supplier_id"]][1], "fit_score": fit[supplier["supplier_id"]][2],
             "price": fit[supplier["supplier_id"]][3],
+            "sustainability_rating": sust[supplier["supplier_id"]][0],
+            "sustainability_score": sust[supplier["supplier_id"]][1],
+            "sustainability_confidence": sust[supplier["supplier_id"]][2],
+            "sustainability_note": sust[supplier["supplier_id"]][3],
             "evidence": [{**evidence, "kind": "page", "title": f"About {supplier['name']}"} for evidence in supplier["evidence"]],
         }) for index, supplier in enumerate(fixture, 1)]
         coverage = {"queries": [], "candidates_found": 0, "researched": 0, "pending": 0, "source_pages": 0,
