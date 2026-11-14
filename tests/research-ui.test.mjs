@@ -1250,3 +1250,55 @@ test("a signed-out answer sends the browser to the sign-in page", async (t) => {
   await settle(() => visited.length > 0, "no navigation was attempted");
   assert.match(visited.join(" "), /navigation/i);
 });
+
+test("sustainability traffic-light ratings, leaf icon, and internet sources are shown", async (t) => {
+  const withSustainability = structuredClone(completedJob);
+  withSustainability.result.suppliers[0] = {
+    ...withSustainability.result.suppliers[0],
+    sustainability_rating: "good",
+    sustainability_score: 92,
+    sustainability_confidence: 0.94,
+    sustainability_probabilities: { 0: 0.02, 1: 0.06, 2: 0.92 },
+    sustainability_note: "ISO 14001 certified.",
+    sustainability_evidence: [
+      {
+        id: "sust-1",
+        source_url: "https://ecovadis.example/alpha",
+        excerpt: "Alpha holds ISO 14001 certification.",
+        fetched_at: "2026-11-14T10:00:00Z",
+        title: "Internet sustainability search",
+        kind: "search_summary",
+      },
+    ],
+  };
+  withSustainability.result.suppliers[1] = {
+    ...withSustainability.result.suppliers[1],
+    sustainability_rating: "ok",
+    sustainability_score: 50,
+    sustainability_confidence: 0.8,
+  };
+  withSustainability.result.suppliers[2] = {
+    ...withSustainability.result.suppliers[2],
+    sustainability_rating: "bad",
+    sustainability_score: 12,
+    sustainability_confidence: 0.9,
+  };
+  const dom = setup(server([withSustainability]), jobId);
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(finished(d));
+  assert.match(text(d, "comparison"), /Good · 92\/100/);
+  assert.match(text(d, "comparison"), /Ok · 50\/100/);
+  assert.match(text(d, "comparison"), /Bad · 12\/100/);
+  assert.ok(d.querySelector('#comparison svg use[href="#i-leaf"]'));
+  assert.ok(
+    d.querySelector("#comparison .traffic-dot.is-active[data-light='good']"),
+  );
+  assert.ok(
+    d.querySelector("#comparison .traffic-dot.is-active[data-light='ok']"),
+  );
+  assert.ok(
+    d.querySelector("#comparison .traffic-dot.is-active[data-light='bad']"),
+  );
+  assert.match(text(d, "details"), /Internet sustainability sources \(1\)/);
+});

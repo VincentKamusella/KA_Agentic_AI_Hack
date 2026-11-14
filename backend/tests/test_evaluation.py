@@ -352,3 +352,75 @@ class CriteriaSuggesterTests(unittest.TestCase):
         with self.assertRaises(GeminiError):
             asyncio.run(GeminiCriteriaSuggester(IncompleteClient()).suggest_criteria(
                 SuggestCriteriaRequest(product='Steel bolts')))
+
+
+class SustainabilityScoringTests(unittest.TestCase):
+    def setUp(self):
+        self.suppliers = [
+            SupplierEvidence.model_validate(s)
+            for s in demo_fixture()['response']['suppliers']
+        ]
+
+    def test_internet_search_and_decision_model_score_traffic_lights(self):
+        import json
+        from backend.evaluation.sustainability import score_suppliers_sustainability
+
+        class Client:
+            def __init__(self):
+                self.endpoints = []
+
+            async def post(self, endpoint, payload):
+                self.endpoints.append(endpoint)
+                if endpoint == 'interactions':
+                    line_a = 'SUPPLIER alpha: Example Alpha holds ISO 14001 and EcoVadis Gold.'
+                    line_b = 'SUPPLIER beta: Example Beta publishes a general environmental policy.'
+                    line_c = 'SUPPLIER gamma: Example Gamma faced environmental compliance fines.'
+                    full = '\n'.join([line_a, line_b, line_c])
+                    o_b = len(line_a) + 1
+                    o_c = o_b + len(line_b) + 1
+                    return {
+                        'status': 'completed',
+                        'steps': [{'type': 'model_output', 'content': [{
+                            'type': 'text',
+                            'text': full,
+                            'annotations': [
+                                {'type': 'url_citation', 'url': 'https://ecovadis.example/alpha', 'start_index': 0, 'end_index': len(line_a)},
+                                {'type': 'url_citation', 'url': 'https://beta.example/esg', 'start_index': o_b, 'end_index': o_b + len(line_b)},
+                                {'type': 'url_citation', 'url': 'https://news.example/gamma-fine', 'start_index': o_c, 'end_index': o_c + len(line_c)},
+                            ],
+                        }]}],
+                    }
+                data = json.loads(payload['input'])
+                sid = data['supplier']['supplier_id']
+                score, conf = {'alpha': (1.85, .93), 'beta': (1.0, .82), 'gamma': (0.2, .91)}[sid]
+                return {'answers': {'sustainability': {
+                    'type': 'score',
+                    'score': score,
+                    'confidence': conf,
+                    'legend': {'0': 'Bad', '1': 'Ok', '2': 'Good'},
+                    'probabilities': {'0': .05, '1': .15, '2': .8} if sid == 'alpha' else {'0': .8, '1': .15, '2': .05},
+                }}}
+
+        client = Client()
+        scored = asyncio.run(score_suppliers_sustainability(client, None, self.suppliers))
+        by_id = {s.supplier_id: s for s in scored}
+        self.assertEqual(by_id['alpha'].sustainability_rating, 'good')
+        self.assertEqual(by_id['beta'].sustainability_rating, 'ok')
+        self.assertEqual(by_id['gamma'].sustainability_rating, 'bad')
+        self.assertGreater(by_id['alpha'].sustainability_score, by_id['beta'].sustainability_score)
+        self.assertGreater(by_id['beta'].sustainability_score, by_id['gamma'].sustainability_score)
+        self.assertEqual(str(by_id['alpha'].sustainability_evidence[0].source_url), 'https://ecovadis.example/alpha')
+        self.assertEqual(by_id['alpha'].sustainability_evidence[0].kind, 'search_summary')
+        self.assertEqual(client.endpoints.count('interactions'), 1)
+        self.assertEqual(client.endpoints.count('decisions'), 3)
+
+    def test_sustainability_fields_never_reach_criterion_evaluation(self):
+        supplier = self.suppliers[0].model_copy(update={
+            'sustainability_rating': 'good',
+            'sustainability_score': 95.0,
+            'sustainability_note': 'ISO 14001 certified.',
+        })
+        client = FakeClient()
+        req = Requirements.model_validate(demo_fixture()['request']['requirements'])
+        asyncio.run(GeminiEvaluator(client).evaluate_suppliers(req, [supplier]))
+        self.assertNotIn('sustainability_', client.calls[0][1]['input'])

@@ -31,6 +31,11 @@ const STATUS = {
   needs_verification: ["Needs verification", "unknown", "unknown"],
   not_evaluated: ["Not evaluated", "none", "dash"],
 };
+const SUSTAINABILITY = {
+  good: ["Good", "pass", 2],
+  ok: ["Ok", "unknown", 1],
+  bad: ["Bad", "fail", 0],
+};
 const KINDS = { mandatory: "Must have", preference: "Nice to have" };
 const PHASES = {
   queued: [
@@ -1001,6 +1006,7 @@ function orderedSuppliers(suppliers, assessments, rank) {
       (rank.get(a.supplier_id) ?? 0) - (rank.get(b.supplier_id) ?? 0) ||
       (y?.preference_score ?? 0) - (x?.preference_score ?? 0) ||
       (y?.evidence_coverage ?? 0) - (x?.evidence_coverage ?? 0) ||
+      (b.sustainability_score ?? -1) - (a.sustainability_score ?? -1) ||
       (a.supplier_id < b.supplier_id ? -1 : 1)
     );
   });
@@ -1336,6 +1342,7 @@ function renderSummaryPanel(context) {
                   text: `Nice-to-have score ${score(assessments.get(s.supplier_id))}`,
                 })
               : null,
+            s.sustainability_rating ? sustainabilityChip(s) : null,
           ),
         ),
       ),
@@ -1456,7 +1463,7 @@ function renderResults() {
   const groupRow = h(
     "tr",
     null,
-    h("th", { colSpan: 5, class: "group-blank" }),
+    h("th", { colSpan: 6, class: "group-blank" }),
     mandatoryCount
       ? h("th", {
           colSpan: mandatoryCount,
@@ -1480,6 +1487,7 @@ function renderResults() {
     h("th", { scope: "col", class: "num", text: "Rank" }),
     h("th", { scope: "col", text: "Supplier" }),
     h("th", { scope: "col", text: "Eligibility" }),
+    h("th", { scope: "col", text: "Sustainability" }),
     h("th", { scope: "col", class: "num", text: "Nice-to-have score" }),
     h("th", { scope: "col", class: "num", text: "Evidence coverage" }),
     criteria.map((c) =>
@@ -1510,6 +1518,7 @@ function renderResults() {
       ),
       h("th", { scope: "row", text: s.name }),
       h("td", null, chip(a ? a.eligibility : "not_evaluated")),
+      h("td", null, sustainabilityChip(s)),
       h("td", { class: "num", text: a ? score(a) : "—" }),
       h("td", {
         class: "num",
@@ -1579,7 +1588,12 @@ function renderResults() {
     collapse.dataset.supplier = s.supplier_id;
     const content = h("div", { class: "accordion-body" });
     content.append(
-      ...[fitLine(s), "price" in s ? priceLine(s) : null].filter(Boolean),
+      ...[
+        fitLine(s),
+        sustainabilityLine(s),
+        sustainabilityEvidenceBlock(s),
+        "price" in s ? priceLine(s) : null,
+      ].filter(Boolean),
     );
     if (a) {
       content.append(
@@ -1861,6 +1875,81 @@ function priceLine(supplier) {
       class: supplier.price ? "price-value" : "muted",
       text: supplier.price || "Not listed in cited sources",
     }),
+  );
+}
+
+function trafficLights(activeIndex) {
+  return h(
+    "span",
+    { class: "traffic-lights", "aria-hidden": "true" },
+    ["bad", "ok", "good"].map((light, i) =>
+      h("span", {
+        class: `traffic-dot${i === activeIndex ? " is-active" : ""}`,
+        "data-light": light,
+      }),
+    ),
+  );
+}
+
+function sustainabilityChip(supplier) {
+  const rating = supplier.sustainability_rating;
+  if (!rating || !SUSTAINABILITY[rating])
+    return h("span", { class: "chip chip-none" }, icon("leaf"), "Not rated");
+  const [label, tone, activeIndex] = SUSTAINABILITY[rating];
+  const scoreText =
+    supplier.sustainability_score != null
+      ? ` · ${Math.round(supplier.sustainability_score)}/100`
+      : "";
+  const probs = supplier.sustainability_probabilities
+    ? ` · P(bad ${percent(supplier.sustainability_probabilities["0"] ?? 0)}, ok ${percent(supplier.sustainability_probabilities["1"] ?? 0)}, good ${percent(supplier.sustainability_probabilities["2"] ?? 0)})`
+    : "";
+  return h(
+    "span",
+    {
+      class: `chip chip-${tone} sust-chip`,
+      title: `${supplier.sustainability_note || "Sustainability score from internet data"}${probs}`,
+    },
+    icon("leaf"),
+    trafficLights(activeIndex),
+    `${label}${scoreText}`,
+  );
+}
+
+function sustainabilityLine(supplier) {
+  if (!supplier.sustainability_rating && !supplier.sustainability_note)
+    return null;
+  const conf =
+    supplier.sustainability_confidence != null
+      ? h("span", {
+          class: "muted",
+          text: `${percent(supplier.sustainability_confidence)} confidence`,
+        })
+      : null;
+  return h(
+    "div",
+    { class: "sust-line" },
+    sourceTag(
+      "decision",
+      "Sustainability scored by gemini-decision-1 using public internet sources and crawled pages.",
+    ),
+    sustainabilityChip(supplier),
+    conf,
+    supplier.sustainability_note
+      ? h("span", { class: "muted", text: supplier.sustainability_note })
+      : null,
+  );
+}
+
+function sustainabilityEvidenceBlock(supplier) {
+  const items = supplier.sustainability_evidence || [];
+  if (!items.length) return null;
+  return h(
+    "details",
+    { class: "sust-sources" },
+    h("summary", {
+      text: `Internet sustainability sources (${items.length})`,
+    }),
+    h("div", { class: "evidence-list" }, items.map(evidenceBlock)),
   );
 }
 
@@ -2316,6 +2405,8 @@ function renderSources() {
         ),
         h("p", { class: "supplier-meta", text: supplierMeta(s) }),
         fitLine(s),
+        sustainabilityLine(s),
+        sustainabilityEvidenceBlock(s),
         "price" in s ? priceLine(s) : null,
         (s.evidence || []).length
           ? h("div", { class: "evidence-list" }, s.evidence.map(evidenceBlock))

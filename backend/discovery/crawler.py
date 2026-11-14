@@ -333,7 +333,8 @@ def crawl_supplier(crawler, supplier, requirements, options):
                     except (ValueError, CrawlError):
                         continue
                 terms = re.findall(r'\w{3,}', requirements.product.lower()) + [
-                    'product', 'capabilit', 'certif', 'quality', 'about', 'contact', 'deliver', '.pdf']
+                    'product', 'capabilit', 'certif', 'quality', 'sustainab', 'esg', 'environ',
+                    'iso14001', 'iso-14001', 'carbon', 'about', 'contact', 'deliver', '.pdf']
                 links = sorted(set(links), key=lambda u: (-sum(t in u.lower() for t in terms), u))
                 queue.extend((link, depth + 1) for link in links[:30])
         except (CrawlError, OSError, ValueError, http.client.HTTPException) as exc:
