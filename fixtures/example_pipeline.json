@@ -1,0 +1,154 @@
+{
+  "request": {
+    "requirements": {
+      "product": "Steel bolts",
+      "quantity": 1000,
+      "delivery_country": "Germany",
+      "criteria": [
+        {
+          "id": "manufactures",
+          "description": "Evidence states the supplier manufactures steel bolts.",
+          "kind": "mandatory",
+          "weight": 1
+        },
+        {
+          "id": "delivery",
+          "description": "Evidence states the supplier ships to Germany.",
+          "kind": "preference",
+          "weight": 1
+        }
+      ]
+    },
+    "options": {
+      "max_suppliers": 20,
+      "max_pages_per_supplier": 5
+    }
+  },
+  "response": {
+    "suppliers": [
+      {
+        "supplier_id": "alpha",
+        "name": "Example Alpha",
+        "website": "https://alpha.example",
+        "evidence": [
+          {
+            "id": "alpha-about",
+            "source_url": "https://alpha.example/about",
+            "excerpt": "We manufacture steel bolts and ship to Germany.",
+            "fetched_at": "2026-11-14T10:00:00Z"
+          }
+        ]
+      },
+      {
+        "supplier_id": "beta",
+        "name": "Example Beta",
+        "website": "https://beta.example",
+        "evidence": [
+          {
+            "id": "beta-about",
+            "source_url": "https://beta.example/about",
+            "excerpt": "We are exclusively a reseller of steel bolts. We ship to Germany.",
+            "fetched_at": "2026-11-14T10:00:00Z"
+          }
+        ]
+      },
+      {
+        "supplier_id": "gamma",
+        "name": "Example Gamma",
+        "website": "https://gamma.example",
+        "evidence": [
+          {
+            "id": "gamma-about",
+            "source_url": "https://gamma.example/about",
+            "excerpt": "Contact us for information about steel bolts.",
+            "fetched_at": "2026-11-14T10:00:00Z"
+          }
+        ]
+      }
+    ],
+    "assessments": [
+      {
+        "supplier_id": "alpha",
+        "eligibility": "eligible",
+        "criteria": [
+          {
+            "criterion_id": "manufactures",
+            "result": "pass",
+            "score": null,
+            "evidence_ids": [
+              "alpha-about"
+            ],
+            "explanation": "The supplier explicitly states it manufactures steel bolts."
+          },
+          {
+            "criterion_id": "delivery",
+            "result": "pass",
+            "score": 100,
+            "evidence_ids": [
+              "alpha-about"
+            ],
+            "explanation": "Shipping to Germany is explicitly stated."
+          }
+        ],
+        "preference_score": 100,
+        "evidence_coverage": 1
+      },
+      {
+        "supplier_id": "beta",
+        "eligibility": "ineligible",
+        "criteria": [
+          {
+            "criterion_id": "manufactures",
+            "result": "fail",
+            "score": null,
+            "evidence_ids": [
+              "beta-about"
+            ],
+            "explanation": "The supplier explicitly states it is exclusively a reseller."
+          },
+          {
+            "criterion_id": "delivery",
+            "result": "pass",
+            "score": 100,
+            "evidence_ids": [
+              "beta-about"
+            ],
+            "explanation": "Shipping to Germany is explicitly stated."
+          }
+        ],
+        "preference_score": 100,
+        "evidence_coverage": 1
+      },
+      {
+        "supplier_id": "gamma",
+        "eligibility": "needs_verification",
+        "criteria": [
+          {
+            "criterion_id": "manufactures",
+            "result": "unknown",
+            "score": null,
+            "evidence_ids": [
+              "gamma-about"
+            ],
+            "explanation": "The page does not establish whether the supplier manufactures bolts."
+          },
+          {
+            "criterion_id": "delivery",
+            "result": "unknown",
+            "score": null,
+            "evidence_ids": [
+              "gamma-about"
+            ],
+            "explanation": "Delivery destinations are not stated."
+          }
+        ],
+        "preference_score": 0,
+        "evidence_coverage": 0
+      }
+    ],
+    "recommended_supplier_ids": [
+      "alpha"
+    ],
+    "issues": []
+  }
+}
