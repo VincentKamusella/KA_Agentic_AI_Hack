@@ -14,7 +14,14 @@ const MAX_CRITERIA = 12;
 const JOB_KEY = "quotepilot-job";
 const AREA_KEY = "quotepilot-area";
 const UNITS = ["pieces", "kg", "tonnes", "metres", "litres"];
-const VIEWS = { brief: "Brief", results: "Shortlist", sources: "Sources" };
+const VIEWS = {
+  brief: "Brief",
+  results: "Shortlist",
+  sources: "Sources",
+  history: "History",
+  suppliers: "Old suppliers",
+  preferences: "Preferences",
+};
 const STATUS = {
   pass: ["Pass", "pass", "check"],
   fail: ["Fail", "fail", "cross"],
@@ -365,6 +372,12 @@ function validateForm() {
 
 /* ---------- Requests ---------- */
 
+/* The session ended: go to sign-in and come back here afterwards. */
+function signedOut() {
+  location.assign(`/signin/?next=${encodeURIComponent("/app/")}`);
+  return new Promise(() => {}); // nothing after this should run
+}
+
 class RequestError extends Error {
   constructor(message, status, fields) {
     super(message);
@@ -394,6 +407,7 @@ async function postResearch(body) {
       "The server could not be reached. Check your connection and try again.",
     );
   }
+  if (response.status === 401) return signedOut();
   const data = await response.json().catch(() => null);
   if (response.ok && data?.job_id) return data;
   throw new RequestError(
@@ -414,6 +428,7 @@ async function fetchJob(id) {
     cache: "no-store",
     signal: AbortSignal.timeout(20000),
   });
+  if (response.status === 401) return signedOut();
   const job = await response.json().catch(() => null);
   if (!response.ok || !job)
     throw new RequestError(
@@ -2330,6 +2345,15 @@ function showView(focus = true) {
     history.replaceState(null, "", `#/${name}`);
   for (const view of document.querySelectorAll("[data-view]"))
     view.hidden = view.dataset.view !== name;
+  const section = ["history", "suppliers", "preferences"].includes(name)
+    ? name
+    : "research";
+  for (const item of document.querySelectorAll("[data-nav]")) {
+    if (item.dataset.nav === section) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  }
+  if (name === "history") loadHistory();
+  if (name === "suppliers") loadSuppliers();
   setNav(false, true);
   document.title = `${VIEWS[name]} · QuotePilot`;
   if (focus) {
@@ -2803,28 +2827,33 @@ function initAreaPicker() {
   const element = $("area-modal");
   // Without Bootstrap (unit tests) the dialog logic still works, unshown.
   const modal = window.bootstrap ? new window.bootstrap.Modal(element) : null;
-  $("area-open").addEventListener("click", () => {
+  // The same dialog serves the brief and the default in Preferences.
+  const open = (target) => {
+    const current = target === "preferences" ? prefArea : area;
+    picker.target = target;
     picker.lookup++;
-    picker.draft = area?.type === "radius" ? { ...area } : null;
+    picker.draft = current?.type === "radius" ? { ...current } : null;
     delete picker.draft?.type;
     picker.countries = new Map(
-      area?.type === "countries"
-        ? area.countries.map((c) => [c.id, c.name])
+      current?.type === "countries"
+        ? current.countries.map((c) => [c.id, c.name])
         : [],
     );
     picker.continents = new Set(
-      area?.type === "continents" ? area.continents : [],
+      current?.type === "continents" ? current.continents : [],
     );
     $("area-radius").value = picker.draft ? picker.draft.radius : 50;
     $("area-radius-value").textContent = `${$("area-radius").value} km`;
     setScope(
-      ["countries", "continents", "world"].includes(area?.type)
-        ? area.type
+      ["countries", "continents", "world"].includes(current?.type)
+        ? current.type
         : "radius",
       false,
     );
     modal?.show();
-  });
+  };
+  $("area-open").addEventListener("click", () => open("brief"));
+  $("pref-area-open").addEventListener("click", () => open("preferences"));
   // Leaflet needs a visible container to size itself, so it starts here.
   element.addEventListener("shown.bs.modal", () => {
     if (!picker.map) {
@@ -2881,13 +2910,395 @@ function initAreaPicker() {
   $("area-confirm").addEventListener("click", () => {
     const picked = pickedArea();
     if (!picked) return;
+    modal?.hide();
+    if (picker.target === "preferences") {
+      setPrefArea(picked);
+      return $("pref-area-open").focus();
+    }
     setArea(picked);
     rememberArea(picked);
-    modal?.hide();
     clearFieldError("area-error", "area-open");
     $("area-open").focus();
   });
   setArea(null);
+}
+
+/* ---------- Account: history, old suppliers, preferences ---------- */
+
+let prefArea = null; // destination in the preferences editor, shaped like `area`
+let presets = []; // this account's saved preferences
+let presetLimit = 10;
+let editingPreset = null; // id being edited, "new", or null when the editor is closed
+
+async function accountRequest(url, { method, body } = {}) {
+  const csrf = document.cookie
+    .split("; ")
+    .find((x) => x.startsWith("csrftoken="))
+    ?.split("=")[1];
+  let response;
+  try {
+    response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(20000),
+      ...(method
+        ? {
+            method,
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": csrf || "",
+            },
+            body: body ? JSON.stringify(body) : undefined,
+          }
+        : {}),
+    });
+  } catch {
+    throw new Error("The server could not be reached. Check your connection.");
+  }
+  if (response.status === 401) return signedOut();
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data)
+    throw new Error(data?.error || "The server returned an error. Try again.");
+  return data;
+}
+
+const JOB_STATUS = {
+  queued: "Queued",
+  running: "Running",
+  completed: "Finished",
+};
+const shortDate = (iso) =>
+  new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+/* Follow a saved search of this account in the workspace. */
+function openSearch(jobId) {
+  state.watch++;
+  Object.assign(state, {
+    status: null,
+    result: null,
+    request: null,
+    error: null,
+    payload: null,
+    evidenceJobId: null,
+    editing: false,
+  });
+  rememberJob(jobId);
+  restore(jobId);
+  go("results");
+}
+
+async function loadList({ url, key, stateId, listId, loading, empty, row }) {
+  const box = $(stateId);
+  const list = $(listId);
+  list.hidden = true;
+  box.replaceChildren(
+    panel({ working: true, title: loading, text: "One moment." }),
+  );
+  let items;
+  try {
+    items = (await accountRequest(url))[key];
+  } catch (e) {
+    return box.replaceChildren(
+      panel({
+        tone: "error",
+        title: "This list could not be loaded",
+        text: e.message,
+      }),
+    );
+  }
+  box.replaceChildren();
+  if (!items.length) return box.append(panel(empty));
+  list.replaceChildren(...items.map(row));
+  list.hidden = false;
+}
+
+function loadHistory() {
+  return loadList({
+    url: "/api/history/",
+    key: "searches",
+    stateId: "history-state",
+    listId: "history-list",
+    loading: "Loading your searches",
+    empty: {
+      title: "No searches yet",
+      text: "Searches you start are listed here, so you can come back to their shortlists and sources.",
+      actions: [linkButton("brief", "Start a search", true)],
+    },
+    row: (item) => {
+      const open = h("button", {
+        type: "button",
+        class: "record-title",
+        text: item.product,
+      });
+      open.addEventListener("click", () => openSearch(item.job_id));
+      return h(
+        "li",
+        { class: item.job_id === state.jobId ? "is-current" : "" },
+        h(
+          "div",
+          null,
+          open,
+          h("p", {
+            class: "record-meta",
+            text: [
+              shortDate(item.created_at),
+              JOB_STATUS[item.status] || "Did not finish",
+              plural(item.suppliers, "supplier", "suppliers"),
+              item.shortlisted === null
+                ? null
+                : `${item.shortlisted} shortlisted`,
+              item.job_id === state.jobId ? "open in the workspace" : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          }),
+        ),
+      );
+    },
+  });
+}
+
+function loadSuppliers() {
+  return loadList({
+    url: "/api/suppliers/",
+    key: "suppliers",
+    stateId: "suppliers-state",
+    listId: "suppliers-list",
+    loading: "Loading your suppliers",
+    empty: {
+      title: "No suppliers yet",
+      text: "Suppliers found by your searches are collected here.",
+      actions: [linkButton("brief", "Start a search", true)],
+    },
+    row: (item) => {
+      const open = h("button", {
+        type: "button",
+        class: "btn btn-outline-secondary btn-sm",
+        text: "Open that search",
+      });
+      open.addEventListener("click", () => openSearch(item.last_job_id));
+      return h(
+        "li",
+        null,
+        h(
+          "div",
+          null,
+          h(
+            "p",
+            { class: "record-title" },
+            h("span", { text: item.name }),
+            externalLink(item.website, "Open website", "supplier-site"),
+          ),
+          h("p", {
+            class: "record-meta",
+            text: `Found in ${plural(item.searches, "search", "searches")} · last on ${shortDate(item.last_seen)} for “${item.last_product}”`,
+          }),
+        ),
+        h(
+          "div",
+          { class: "record-side" },
+          item.last_eligibility
+            ? chip(item.last_eligibility)
+            : h("span", { class: "muted", text: "Not assessed" }),
+          open,
+        ),
+      );
+    },
+  });
+}
+
+function setPrefArea(value) {
+  prefArea = value;
+  $("pref-area-text").textContent = value ? areaLabel(value) : "None";
+  $("pref-area-open").classList.toggle("is-empty", !value);
+  $("pref-area-clear").hidden = !value;
+}
+
+const presetSummary = (p) =>
+  [
+    `Unit: ${p.quantity_unit || "pieces"}`,
+    p.delivery_area
+      ? `Destination: ${areaLabel(p.delivery_area)}`
+      : "No destination",
+    p.other_requirements
+      ? `Other requirements: ${p.other_requirements}`
+      : "No other requirements",
+  ].join(" · ");
+
+/* Fill the brief from one saved set. Only ever done on request. */
+function applyPreset(preset) {
+  const unit = preset.quantity_unit || "pieces";
+  $("unit").value = UNITS.includes(unit) ? unit : "custom";
+  $("unit-custom").value = UNITS.includes(unit) ? "" : unit;
+  $("unit-custom-field").hidden = $("unit").value !== "custom";
+  $("unit").hidden = $("unit").value === "custom";
+  if (preset.delivery_area) {
+    setArea(preset.delivery_area);
+    rememberArea(preset.delivery_area);
+    clearFieldError("area-error", "area-open");
+  }
+  $("other").value = preset.other_requirements || "";
+  togglePresets(false);
+  announce(`Applied the preferences “${preset.name}” to the brief.`);
+  $("product").focus();
+}
+
+function togglePresets(open) {
+  $("presets-panel").hidden = !open;
+  $("presets-open").setAttribute("aria-expanded", String(open));
+}
+
+function renderPresets() {
+  // Panel on the brief
+  $("presets-help").textContent = presets.length
+    ? "Choosing one replaces the unit, delivery destination and other requirements in this brief. The product and quantity stay as they are."
+    : "You have no saved preferences yet. Create some on the Preferences page.";
+  $("presets-list").replaceChildren(
+    ...presets.map((preset) => {
+      const apply = h(
+        "button",
+        { type: "button", class: "preset" },
+        h("strong", { text: preset.name }),
+        h("span", { text: presetSummary(preset) }),
+      );
+      apply.addEventListener("click", () => applyPreset(preset));
+      return h("li", null, apply);
+    }),
+  );
+  // Preferences page
+  $("pref-count").textContent = `${presets.length} of ${presetLimit} saved`;
+  $("pref-new").disabled =
+    presets.length >= presetLimit || editingPreset !== null;
+  $("pref-new").title =
+    presets.length >= presetLimit
+      ? `You can save up to ${presetLimit}. Delete one to add another.`
+      : "";
+  $("pref-list").replaceChildren(
+    ...presets.map((preset) => {
+      const edit = h("button", {
+        type: "button",
+        class: "btn btn-outline-secondary btn-sm",
+        text: "Edit",
+        disabled: editingPreset !== null,
+      });
+      const remove = h("button", {
+        type: "button",
+        class: "btn btn-outline-secondary btn-sm",
+        text: "Delete",
+        "aria-label": `Delete ${preset.name}`,
+        disabled: editingPreset !== null,
+      });
+      edit.addEventListener("click", () => editPreset(preset));
+      remove.addEventListener("click", () => deletePreset(preset));
+      return h(
+        "li",
+        { class: editingPreset === preset.id ? "is-current" : "" },
+        h(
+          "div",
+          null,
+          h("p", { class: "record-title", text: preset.name }),
+          h("p", { class: "record-meta", text: presetSummary(preset) }),
+        ),
+        h("div", { class: "record-side" }, edit, remove),
+      );
+    }),
+  );
+}
+
+/* Open the editor for a saved set, or for a new one when none is given. */
+function editPreset(preset) {
+  editingPreset = preset ? preset.id : "new";
+  $("pref-editor-title").textContent = preset
+    ? `Edit “${preset.name}”`
+    : "New preferences";
+  $("pref-name").value = preset?.name || "";
+  const unit = preset?.quantity_unit || "pieces";
+  $("pref-unit").value = UNITS.includes(unit) ? unit : "custom";
+  $("pref-unit-custom").value = UNITS.includes(unit) ? "" : unit;
+  $("pref-unit-custom-field").hidden = $("pref-unit").value !== "custom";
+  setPrefArea(preset?.delivery_area || null);
+  $("pref-other").value = preset?.other_requirements || "";
+  $("pref-error").hidden = true;
+  $("pref-status").textContent = "";
+  $("preferences-form").hidden = false;
+  renderPresets();
+  $("pref-name").focus();
+}
+
+function closePresetEditor() {
+  editingPreset = null;
+  $("preferences-form").hidden = true;
+  renderPresets();
+}
+
+async function loadPreferences() {
+  try {
+    const data = await accountRequest("/api/preferences/");
+    presets = data.preferences || [];
+    presetLimit = data.limit || presetLimit;
+  } catch (e) {
+    $("pref-status").textContent =
+      `Your preferences could not be loaded. ${e.message}`;
+  }
+  renderPresets();
+}
+
+async function savePreset() {
+  const name = $("pref-name").value.trim();
+  const fail = (message) => {
+    $("pref-error").textContent = message;
+    $("pref-error").hidden = false;
+  };
+  if (!name) {
+    fail("Give these preferences a name.");
+    return $("pref-name").focus();
+  }
+  const unit =
+    $("pref-unit").value === "custom"
+      ? $("pref-unit-custom").value.trim()
+      : $("pref-unit").value;
+  const creating = editingPreset === "new";
+  $("pref-save").disabled = true;
+  try {
+    const saved = await accountRequest(
+      creating ? "/api/preferences/" : `/api/preferences/${editingPreset}/`,
+      {
+        method: creating ? "POST" : "PUT",
+        body: {
+          name,
+          quantity_unit: unit || "pieces",
+          delivery_area: prefArea,
+          other_requirements: $("pref-other").value,
+        },
+      },
+    );
+    presets = creating
+      ? [...presets, saved]
+      : presets.map((p) => (p.id === saved.id ? saved : p));
+    closePresetEditor();
+    $("pref-status").textContent = `Saved “${saved.name}”.`;
+  } catch (e) {
+    fail(e.message);
+  } finally {
+    $("pref-save").disabled = false;
+  }
+}
+
+async function deletePreset(preset) {
+  if (!window.confirm(`Delete the preferences “${preset.name}”?`)) return;
+  try {
+    await accountRequest(`/api/preferences/${preset.id}/`, {
+      method: "DELETE",
+    });
+    presets = presets.filter((p) => p.id !== preset.id);
+    $("pref-status").textContent = `Deleted “${preset.name}”.`;
+  } catch (e) {
+    $("pref-status").textContent = e.message;
+  }
+  renderPresets();
 }
 
 /* ---------- Events ---------- */
@@ -2942,6 +3353,24 @@ document.addEventListener("click", (event) => {
     startResearch(state.payload, "retry");
   else if (action === "reconnect" && state.jobId) restore(state.jobId);
 });
+$("preferences-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  savePreset();
+});
+$("pref-new").addEventListener("click", () => editPreset(null));
+$("pref-cancel").addEventListener("click", closePresetEditor);
+$("presets-open").addEventListener("click", () =>
+  togglePresets($("presets-panel").hidden),
+);
+$("pref-unit").addEventListener("change", () => {
+  $("pref-unit-custom-field").hidden = $("pref-unit").value !== "custom";
+});
+$("pref-area-clear").addEventListener("click", () => setPrefArea(null));
+// Another person may sign in on this browser next: forget this account's job.
+$("sign-out").addEventListener("submit", () => {
+  rememberJob(null);
+  rememberArea(null);
+});
 window.addEventListener("hashchange", () => showView());
 // The elapsed time is the only thing that changes every second.
 setInterval(() => {
@@ -2956,6 +3385,7 @@ const startedOnBrief = !location.hash;
 showView(false);
 render();
 const savedJob = recalledJob();
+loadPreferences();
 if (savedJob) {
   restore(savedJob);
   if (startedOnBrief) go("results");

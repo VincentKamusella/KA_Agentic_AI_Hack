@@ -36,6 +36,7 @@
   <symbol id="i-src-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 4 4"/></symbol>
   <symbol id="i-src-code" viewBox="0 0 16 16"><path d="m5.5 4-4 4 4 4M10.5 4l4 4-4 4"/></symbol>
   <symbol id="i-src-rules" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h7"/></symbol>
+  <symbol id="i-signout" viewBox="0 0 24 24"><path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10M15 8l4 4-4 4M19 12H9.5"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h10v10H9zM15 9V5H5v10h4"/></symbol>
 </svg>
 
@@ -49,13 +50,17 @@
   </div>
   <div class="sidebar-body" id="sidebar-nav">
     <nav aria-label="Workspace">
-      <a class="nav-item" href="#/brief" id="nav-research" title="Current research" aria-current="page"><svg aria-hidden="true"><use href="#i-research"/></svg><span class="nav-label">Current research</span></a>
-      <button type="button" class="nav-item" disabled title="History: not available yet"><svg aria-hidden="true"><use href="#i-history"/></svg><span class="nav-label">History</span><span class="soon">Soon</span></button>
-      <button type="button" class="nav-item" disabled title="Preferences: not available yet"><svg aria-hidden="true"><use href="#i-preferences"/></svg><span class="nav-label">Preferences</span><span class="soon">Soon</span></button>
-      <button type="button" class="nav-item" disabled title="Old suppliers: not available yet"><svg aria-hidden="true"><use href="#i-suppliers"/></svg><span class="nav-label">Old suppliers</span><span class="soon">Soon</span></button>
+      <a class="nav-item" href="#/brief" data-nav="research" title="Current research" aria-current="page"><svg aria-hidden="true"><use href="#i-research"/></svg><span class="nav-label">Current research</span></a>
+      <a class="nav-item" href="#/history" data-nav="history" title="History"><svg aria-hidden="true"><use href="#i-history"/></svg><span class="nav-label">History</span></a>
+      <a class="nav-item" href="#/preferences" data-nav="preferences" title="Preferences"><svg aria-hidden="true"><use href="#i-preferences"/></svg><span class="nav-label">Preferences</span></a>
+      <a class="nav-item" href="#/suppliers" data-nav="suppliers" title="Old suppliers"><svg aria-hidden="true"><use href="#i-suppliers"/></svg><span class="nav-label">Old suppliers</span></a>
     </nav>
     <div class="sidebar-bottom">
       <button type="button" class="nav-item" disabled title="Settings: not available yet"><svg aria-hidden="true"><use href="#i-settings"/></svg><span class="nav-label">Settings</span><span class="soon">Soon</span></button>
+      <p class="account-email" title="Signed in as {{ request.user.email }}">{{ request.user.email }}</p>
+      <form method="post" action="{% url 'sign-out' %}" id="sign-out">{% csrf_token %}
+        <button type="submit" class="nav-item" title="Sign out"><svg aria-hidden="true"><use href="#i-signout"/></svg><span class="nav-label">Sign out</span></button>
+      </form>
     </div>
   </div>
 </aside>
@@ -70,8 +75,19 @@
         <h1 id="brief-title">New supplier search</h1>
         <p>Tell us what you need and where it should arrive.</p>
       </div>
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+      <div class="head-actions">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="presets-open" aria-expanded="false" aria-controls="presets-panel" data-busy-lock>Preferences</button>
+      </div>
     </div>
+    <section id="presets-panel" class="presets-panel" aria-labelledby="presets-title" hidden>
+      <div class="block-head">
+        <h2 id="presets-title">Apply saved preferences</h2>
+        <a href="#/preferences">Manage preferences</a>
+      </div>
+      <p class="help" id="presets-help"></p>
+      <ul id="presets-list" class="presets-list"></ul>
+    </section>
     <form id="brief-form" class="brief-form" novalidate>
       <fieldset id="brief-fields">
         <div id="form-error" class="note note-error" role="alert" tabindex="-1" hidden></div>
@@ -211,6 +227,91 @@
       <div id="sources-list" class="supplier-list"></div>
       <section id="deferred" class="content-block" aria-labelledby="deferred-title" hidden></section>
     </div>
+  </section>
+
+  <!-- History -->
+  <section id="view-history" data-view="history" aria-labelledby="history-title" hidden>
+    <div class="page-head">
+      <div>
+        <h1 id="history-title">History</h1>
+        <p>The searches started from your account, newest first. Open one to see its shortlist and sources again.</p>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+    </div>
+    <div id="history-state"></div>
+    <ul id="history-list" class="record-list" hidden></ul>
+  </section>
+
+  <!-- Old suppliers -->
+  <section id="view-suppliers" data-view="suppliers" aria-labelledby="suppliers-title" hidden>
+    <div class="page-head">
+      <div>
+        <h1 id="suppliers-title">Old suppliers</h1>
+        <p>Every supplier that your earlier searches found, with the result it had the last time it was assessed. A result belongs to that search’s requirements, not to the supplier in general.</p>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+    </div>
+    <div id="suppliers-state"></div>
+    <ul id="suppliers-list" class="record-list" hidden></ul>
+  </section>
+
+  <!-- Preferences -->
+  <section id="view-preferences" data-view="preferences" aria-labelledby="preferences-title" hidden>
+    <div class="page-head">
+      <div>
+        <h1 id="preferences-title">Preferences</h1>
+        <p>Save up to ten sets of brief details for the purchases you repeat. On the brief, the Preferences button lets you apply one; nothing is applied on its own.</p>
+      </div>
+    </div>
+    <div class="toolbar-row">
+      <p id="pref-count" class="toolbar-title"></p>
+      <button type="button" id="pref-new" class="btn btn-primary btn-sm btn-icon"><svg aria-hidden="true"><use href="#i-plus"/></svg>New preferences</button>
+    </div>
+    <p class="help" id="pref-status" role="status" aria-live="polite"></p>
+    <ul id="pref-list" class="record-list"></ul>
+
+    <form id="preferences-form" class="brief-form pref-editor" novalidate hidden>
+      <section class="form-block" aria-labelledby="pref-editor-title">
+        <h2 id="pref-editor-title">New preferences</h2>
+        <div class="field">
+          <label class="form-label" for="pref-name">Name</label>
+          <input class="form-control" id="pref-name" maxlength="60" placeholder="For example: Fasteners, EU delivery" aria-describedby="pref-error">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="form-label" for="pref-unit">Quantity unit</label>
+            <select class="form-select" id="pref-unit">
+              <option value="pieces">pieces</option>
+              <option value="kg">kg</option>
+              <option value="tonnes">tonnes</option>
+              <option value="metres">metres</option>
+              <option value="litres">litres</option>
+              <option value="custom">Other unit…</option>
+            </select>
+            <div id="pref-unit-custom-field" hidden>
+              <label class="visually-hidden" for="pref-unit-custom">Custom unit</label>
+              <input class="form-control" id="pref-unit-custom" maxlength="40" placeholder="Unit, for example pallets">
+            </div>
+          </div>
+          <div class="field">
+            <span class="form-label" id="pref-area-label">Delivery destination</span>
+            <div class="pref-area">
+              <button type="button" id="pref-area-open" class="form-control area-button" aria-labelledby="pref-area-label pref-area-text"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="pref-area-text">None</span></button>
+              <button type="button" id="pref-area-clear" class="btn btn-outline-secondary" hidden>Clear</button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="form-label" for="pref-other">Other requirements <span class="optional">Optional</span></label>
+          <textarea class="form-control" id="pref-other" maxlength="4000" rows="4" placeholder="Requirements that go with these preferences, for example: ISO 9001 certification required."></textarea>
+        </div>
+        <p class="field-error" id="pref-error" role="alert" hidden></p>
+      </section>
+      <div class="action-bar">
+        <button type="submit" class="btn btn-primary" id="pref-save">Save</button>
+        <button type="button" class="btn btn-outline-secondary" id="pref-cancel">Cancel</button>
+      </div>
+    </form>
   </section>
 </main>
 </div>

@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -16,6 +17,7 @@ from backend.research.requests import StageRequest
 from backend.tests.base import StoreCase
 from backend.tests.support import DemoDiscovery, DemoEvaluator, demo_fixture
 from backend.tests.test_recommendations import draft, provider_response
+from web.accounts.services import record_search
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
@@ -25,6 +27,14 @@ class QueueTests(TransactionTestCase):
         self.payload = StageRequest.model_validate(demo_fixture()['request'])
         self.gemini = AsyncMock()
         self.gemini.post.return_value = provider_response([draft()])
+        # The research API requires a signed-in account.
+        self.user = get_user_model().objects.create_user('buyer@example.com', 'buyer@example.com', 'unused-password')
+        self.client.force_login(self.user)
+
+    def own(self, token):
+        """Jobs started directly in the store belong to nobody; the API only
+        reuses evidence from jobs of the signed-in account."""
+        record_search(self.user, token, self.payload.requirements.product)
 
     def expire(self, claim):
         ResearchJob.objects.filter(pk=claim['id']).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
@@ -79,6 +89,7 @@ class QueueTests(TransactionTestCase):
     def test_evaluation_uses_saved_evidence(self):
         with patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
             token = start_job(self.store, self.payload, 'discover')
+            self.own(token)
             claim = self.store.claim()
             execute_job(self.store, claim['id'], claim['lease_id'])
         payload = self.payload.model_dump(mode='json') | {'discovery_job_id': token}
@@ -107,6 +118,7 @@ class QueueTests(TransactionTestCase):
     def test_evaluation_can_rerun_when_discovery_finished_before_eval_failed(self):
         with patch('backend.integrations.gemini.GeminiClient', return_value=self.gemini), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
             token = start_job(self.store, self.payload, 'research')
+            self.own(token)
             ResearchJob.objects.filter(access_token=token).update(
                 status='failed',
                 result={'phase': 'evaluation', 'suppliers': demo_fixture()['response']['suppliers']},
@@ -122,6 +134,7 @@ class QueueTests(TransactionTestCase):
 
     def test_evaluation_rejects_missing_pending_and_non_discovery_references(self):
         token = start_job(self.store, self.payload, 'discover')
+        self.own(token)
         for reference in ['f' * 64, token]:
             payload = self.payload.model_dump(mode='json') | {'discovery_job_id': reference}
             self.assertEqual(self.client.post('/api/research/', json.dumps(payload), content_type='application/json').status_code, 400)

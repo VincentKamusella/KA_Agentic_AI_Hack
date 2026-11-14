@@ -145,7 +145,7 @@ const complete = {
 };
 const completedJob = { status: "completed", result: complete, request };
 
-function setup(fetch, saved = null) {
+function setup(fetch, saved = null, account = false) {
   const dom = new JSDOM(html.replace(/{%.*?%}/g, ""), {
     url: "http://localhost/",
     runScripts: "outside-only",
@@ -154,7 +154,12 @@ function setup(fetch, saved = null) {
   window.HTMLElement.prototype.scrollIntoView = () => {};
   window.scrollTo = () => {};
   window.AbortSignal = AbortSignal;
-  window.fetch = fetch;
+  // Account requests get neutral answers unless a test supplies its own.
+  window.fetch = async (url, init) => {
+    if (!account && String(url).startsWith("/api/preferences/"))
+      return reply({ preferences: [], limit: 10 });
+    return fetch(url, init);
+  };
   window.setInterval = () => 1;
   window.clearInterval = () => {};
   // Poll immediately instead of every two seconds.
@@ -1024,4 +1029,224 @@ test("card navigation stays responsive during interrupted animations", async (t)
   assert.equal(previous.disabled, false);
   assert.equal(next.disabled, true);
   assert.equal(d.querySelectorAll(".contact-item:not([hidden])").length, 1);
+});
+
+test("saved preferences are offered on the brief and applied only when chosen", async (t) => {
+  const calls = [];
+  const dom = setup(
+    async (url, init) => {
+      calls.push({ url, init });
+      if (url === "/api/preferences/")
+        return reply({
+          limit: 10,
+          preferences: [
+            {
+              id: 4,
+              name: "Fasteners",
+              quantity_unit: "pallets",
+              delivery_area: { type: "continents", continents: ["Europe"] },
+              other_requirements: "ISO 9001 required",
+            },
+            {
+              id: 5,
+              name: "Bulk",
+              quantity_unit: "kg",
+              delivery_area: null,
+              other_requirements: "",
+            },
+          ],
+        });
+      if (init?.method === "POST")
+        return reply({ job_id: jobId, status: "queued" }, 202);
+      return reply(completedJob);
+    },
+    null,
+    true,
+  );
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => d.querySelectorAll("#presets-list .preset").length === 2);
+  // Nothing is applied on its own, and the panel starts closed.
+  assert.equal(d.getElementById("unit").value, "pieces");
+  assert.equal(d.getElementById("other").value, "");
+  assert.equal(d.getElementById("presets-panel").hidden, true);
+  d.getElementById("product").value = "Steel bolts";
+  d.getElementById("quantity").value = "10";
+  d.getElementById("presets-open").click();
+  assert.equal(d.getElementById("presets-panel").hidden, false);
+  assert.equal(
+    d.getElementById("presets-open").getAttribute("aria-expanded"),
+    "true",
+  );
+  d.querySelector("#presets-list .preset").click();
+  assert.equal(d.getElementById("presets-panel").hidden, true);
+  assert.equal(d.getElementById("unit-custom").value, "pallets");
+  assert.equal(d.getElementById("unit").hidden, true);
+  assert.equal(d.getElementById("unit-custom-field").hidden, false);
+  assert.equal(text(d, "area-text"), "Europe");
+  assert.equal(d.getElementById("product").value, "Steel bolts");
+  submit(dom);
+  await settle(() => posts(calls).length === 1);
+  assert.deepEqual(posts(calls)[0].requirements, {
+    product: "Steel bolts",
+    quantity: 10,
+    quantity_unit: "pallets",
+    delivery_country: "Europe",
+    needed_by: null,
+    other_requirements: "ISO 9001 required",
+  });
+});
+
+test("preferences can be created, edited and deleted, up to the limit", async (t) => {
+  const calls = [];
+  let saved = [];
+  const dom = setup(
+    async (url, init) => {
+      calls.push({ url, init });
+      const body = init?.body ? JSON.parse(init.body) : null;
+      if (url === "/api/preferences/" && init?.method === "POST") {
+        saved.push({ id: saved.length + 1, ...body });
+        return reply(saved.at(-1), 201);
+      }
+      if (url === "/api/preferences/")
+        return reply({ preferences: saved, limit: 2 });
+      if (init?.method === "PUT") return reply({ id: 1, ...body });
+      if (init?.method === "DELETE") return reply({ deleted: 1 });
+      return reply({ features: [] });
+    },
+    null,
+    true,
+  );
+  t.after(() => dom.window.close());
+  dom.window.confirm = () => true;
+  const d = dom.window.document;
+  const event = (type) =>
+    new dom.window.Event(type, { bubbles: true, cancelable: true });
+  const save = () =>
+    d.getElementById("preferences-form").dispatchEvent(event("submit"));
+  await settle(() => /0 of 2/.test(text(d, "pref-count")));
+  assert.equal(d.getElementById("preferences-form").hidden, true);
+
+  d.getElementById("pref-new").click();
+  save(); // no name yet
+  assert.match(text(d, "pref-error"), /name/);
+  d.getElementById("pref-name").value = "Fasteners";
+  d.getElementById("pref-unit").value = "kg";
+  d.getElementById("pref-area-open").click();
+  d.getElementById("scope-world").checked = true;
+  d.getElementById("scope-world").dispatchEvent(event("change"));
+  d.getElementById("area-confirm").click();
+  d.getElementById("pref-other").value = "Samples required";
+  save();
+  await settle(() => /1 of 2/.test(text(d, "pref-count")));
+  assert.deepEqual(
+    JSON.parse(calls.find((c) => c.init?.method === "POST").init.body),
+    {
+      name: "Fasteners",
+      quantity_unit: "kg",
+      delivery_area: { type: "world" },
+      other_requirements: "Samples required",
+    },
+  );
+  assert.match(text(d, "pref-list"), /Destination: Worldwide/);
+  // The brief was not touched by saving.
+  assert.equal(d.getElementById("unit").value, "pieces");
+
+  d.querySelector("#pref-list button").click(); // Edit
+  assert.equal(d.getElementById("pref-name").value, "Fasteners");
+  d.getElementById("pref-name").value = "Bolts";
+  save();
+  await settle(() => /Bolts/.test(text(d, "pref-list")));
+  assert.equal(
+    calls.find((c) => c.init?.method === "PUT").url,
+    "/api/preferences/1/",
+  );
+
+  d.getElementById("pref-new").click();
+  d.getElementById("pref-name").value = "Second";
+  save();
+  await settle(() => /2 of 2/.test(text(d, "pref-count")));
+  assert.equal(d.getElementById("pref-new").disabled, true);
+
+  d.querySelectorAll("#pref-list button")[1].click(); // Delete the first
+  await settle(() => /1 of 2/.test(text(d, "pref-count")));
+  assert.equal(
+    calls.find((c) => c.init?.method === "DELETE").url,
+    "/api/preferences/1/",
+  );
+  assert.doesNotMatch(text(d, "pref-list"), /Bolts/);
+  assert.equal(d.getElementById("pref-new").disabled, false);
+});
+
+test("history lists the account's searches and opens one in the workspace", async (t) => {
+  const calls = [];
+  const dom = setup(async (url, init) => {
+    calls.push({ url, init });
+    if (url === "/api/history/")
+      return reply({
+        searches: [
+          {
+            job_id: jobId,
+            product: "Food-grade aluminium containers",
+            created_at: "2026-11-14T10:00:00Z",
+            status: "completed",
+            suppliers: 3,
+            shortlisted: 1,
+          },
+        ],
+      });
+    if (url === "/api/suppliers/")
+      return reply({
+        suppliers: [
+          {
+            supplier_id: "alpha",
+            name: "<b>Example Alpha</b>",
+            website: "https://alpha.example/",
+            searches: 2,
+            last_seen: "2026-11-14T10:00:00Z",
+            last_product: "Containers",
+            last_job_id: jobId,
+            last_eligibility: "eligible",
+          },
+        ],
+      });
+    return reply(completedJob);
+  });
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  dom.window.location.hash = "/suppliers";
+  await settle(() => !d.getElementById("suppliers-list").hidden);
+  assert.match(text(d, "suppliers-list"), /<b>Example Alpha<\/b>/);
+  assert.equal(d.querySelector("#suppliers-list b"), null);
+  assert.match(text(d, "suppliers-list"), /Found in 2 searches/);
+  assert.match(text(d, "suppliers-list"), /Eligible/);
+  dom.window.location.hash = "/history";
+  await settle(() => !d.getElementById("history-list").hidden);
+  assert.match(
+    text(d, "history-list"),
+    /Finished · 3 suppliers · 1 shortlisted/,
+  );
+  assert.equal(
+    d.querySelector("[data-nav=history]").getAttribute("aria-current"),
+    "page",
+  );
+  d.querySelector("#history-list button").click();
+  await settle(finished(d));
+  assert.equal(dom.window.location.hash, "#/results");
+  assert.equal(dom.window.localStorage.getItem("quotepilot-job"), jobId);
+  assert.equal(d.getElementById("product").value, submitted.product);
+});
+
+test("a signed-out answer sends the browser to the sign-in page", async (t) => {
+  const visited = [];
+  const dom = setup(
+    async () => reply({ error: "Sign in to continue." }, 401),
+    jobId,
+    true,
+  );
+  t.after(() => dom.window.close());
+  // jsdom cannot navigate; observe the attempt through the console it reports to.
+  dom.virtualConsole?.on("jsdomError", (e) => visited.push(String(e.message)));
+  await settle(() => visited.length > 0, "no navigation was attempted");
+  assert.match(visited.join(" "), /navigation/i);
 });

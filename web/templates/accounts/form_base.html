@@ -1,0 +1,8 @@
+{% extends "site_base.html" %}
+{% block content %}
+<section class="auth" aria-labelledby="auth-title">
+  <h1 id="auth-title">{% block heading %}{% endblock %}</h1>
+  <p class="auth-lead">{% block lead %}{% endblock %}</p>
+  {% block body %}{% endblock %}
+</section>
+{% endblock %}
