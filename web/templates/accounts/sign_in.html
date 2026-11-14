@@ -1,0 +1,16 @@
+{% extends "accounts/form_base.html" %}
+{% block title %}Sign in · QuotePilot{% endblock %}
+{% block nav %}<a class="btn btn-outline-secondary btn-sm" href="{% url 'sign-up' %}">Create account</a>{% endblock %}
+{% block heading %}Sign in{% endblock %}
+{% block lead %}Your searches, suppliers and preferences are kept with your account.{% endblock %}
+{% block body %}
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+  {% if form.non_field_errors %}<div class="note note-error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% include "accounts/field.html" with field=form.email label="Email address" type="email" autocomplete="email" autofocus=True %}
+  {% include "accounts/field.html" with field=form.password label="Password" type="password" autocomplete="current-password" %}
+  <button type="submit" class="btn btn-primary">Sign in</button>
+</form>
+<p class="auth-links"><a href="{% url 'forgot-password' %}">Forgot your password?</a><span>No account yet? <a href="{% url 'sign-up' %}">Create one</a></span></p>
+{% endblock %}

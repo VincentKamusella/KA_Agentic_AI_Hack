@@ -1,0 +1,355 @@
+/* Landing and account pages. Tokens, gradient, buttons, chips and form
+   controls come from app.css; this file only adds the page layouts. */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 22px 32px;
+}
+.site-header nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--qp-light);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.site-brand svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--qp-accent-text);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.site-link {
+  color: var(--qp-muted);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.site main {
+  overflow-x: clip; /* the hero rings bleed past the column on purpose */
+  max-width: 1160px;
+  padding-top: 0;
+}
+.site h2 {
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: 56px;
+  padding: 56px 0 96px;
+}
+.hero h1 {
+  font-size: clamp(2.25rem, 4.4vw, 3.5rem);
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+}
+.hero-copy p {
+  max-width: 48ch;
+  margin-top: 20px;
+  color: var(--qp-muted);
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+.hero-figure {
+  position: relative;
+  margin: 0;
+}
+.hero-rings {
+  position: absolute;
+  inset: -22% -12%;
+  width: 124%;
+  height: 144%;
+  fill: none;
+  stroke: var(--qp-accent-text);
+  stroke-width: 1;
+  opacity: 0.22;
+  pointer-events: none;
+}
+.hero-rings circle:nth-child(1) {
+  fill: color-mix(in srgb, var(--qp-accent) 30%, transparent);
+}
+.hero-rings path {
+  stroke-dasharray: 2 8;
+}
+.hero-rings .hero-dot {
+  fill: var(--qp-light);
+  stroke: none;
+}
+.example {
+  position: relative;
+  padding: 22px;
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--qp-solid) 82%, transparent);
+  box-shadow: 0 30px 60px -30px #000;
+  font-size: 0.875rem;
+}
+.example-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+.example-tag {
+  padding: 2px 9px;
+  border: 1px dashed var(--qp-line-strong);
+  border-radius: 999px;
+  color: var(--qp-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.example-reqs {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  color: var(--qp-muted);
+  list-style: none;
+}
+.example-reqs li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.example-reqs span {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.example-reqs em {
+  margin-left: 4px;
+  font-size: 0.75rem;
+}
+.example-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.example-table th,
+.example-table td {
+  padding: 9px 6px;
+  border-top: 1px solid var(--qp-line);
+  text-align: left;
+  white-space: nowrap;
+}
+.example-table thead th {
+  border-top: 0;
+  color: var(--qp-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.example-table tbody th {
+  font-weight: 500;
+}
+.example-table .cell {
+  width: 28px;
+  height: 28px;
+}
+.example-quote {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--qp-line);
+  border-radius: 10px;
+  background: var(--qp-surface);
+}
+.example-quote span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--qp-muted);
+  font-size: 0.75rem;
+}
+
+/* ---------- Sections ---------- */
+
+.steps-section,
+.principles {
+  padding: 72px 0;
+  border-top: 1px solid var(--qp-line);
+}
+.how {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 48px;
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: how;
+}
+.how li {
+  counter-increment: how;
+}
+.how svg {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 18px;
+  fill: none;
+  stroke: var(--qp-accent-text);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.how h3 {
+  font-size: 1.0625rem;
+}
+.how h3::before {
+  content: counter(how) ". ";
+  color: var(--qp-muted);
+  font-variant-numeric: tabular-nums;
+}
+.how p,
+.principles dd {
+  max-width: 44ch;
+  margin: 8px 0 0;
+  color: var(--qp-muted);
+}
+.principles {
+  display: grid;
+  grid-template-columns: minmax(0, 0.6fr) minmax(0, 1.4fr);
+  gap: 48px;
+}
+.principles dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px 48px;
+  margin: 0;
+}
+.principles dt {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.closing {
+  padding: 80px 0 72px;
+  border-top: 1px solid var(--qp-line);
+  text-align: center;
+}
+.closing h2 {
+  font-size: 2rem;
+}
+.closing p {
+  margin: 10px auto 26px;
+  color: var(--qp-muted);
+}
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 24px 0 8px;
+  border-top: 1px solid var(--qp-line);
+  color: var(--qp-muted);
+  font-size: 0.8125rem;
+}
+
+/* ---------- Account pages ---------- */
+
+.auth {
+  max-width: 440px;
+  margin: 56px auto 0;
+  padding: 36px;
+  border: 1px solid var(--qp-line);
+  border-radius: 16px;
+  background: var(--qp-surface);
+}
+.auth h1 {
+  font-size: 1.625rem;
+  letter-spacing: -0.02em;
+}
+.auth-lead {
+  margin: 8px 0 26px;
+  color: var(--qp-muted);
+}
+.auth form .btn {
+  width: 100%;
+  margin-top: 6px;
+}
+.auth .note {
+  margin-bottom: 18px;
+}
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: 22px;
+  color: var(--qp-muted);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+    padding: 32px 0 64px;
+  }
+  .how,
+  .principles,
+  .principles dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .hero-rings {
+    inset: -10% -30%;
+    width: 160%;
+    height: 120%;
+  }
+}
+@media (max-width: 720px) {
+  .site-header {
+    padding: 16px;
+  }
+  .example {
+    padding: 16px;
+    font-size: 0.8125rem;
+  }
+  .example-table th:nth-child(1),
+  .example-table td:nth-child(1) {
+    display: none;
+  }
+  .example-table .chip {
+    font-size: 0.75rem;
+  }
+  .example-table th,
+  .example-table td {
+    padding: 8px 3px;
+  }
+  .example-table .cell {
+    width: 24px;
+    height: 24px;
+  }
+  .auth {
+    margin-top: 24px;
+    padding: 24px 20px;
+  }
+}

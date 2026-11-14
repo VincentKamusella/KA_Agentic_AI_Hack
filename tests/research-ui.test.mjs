@@ -145,7 +145,7 @@ const complete = {
 };
 const completedJob = { status: "completed", result: complete, request };
 
-function setup(fetch, saved = null) {
+function setup(fetch, saved = null, account = false) {
   const dom = new JSDOM(html.replace(/{%.*?%}/g, ""), {
     url: "http://localhost/",
     runScripts: "outside-only",
@@ -154,7 +154,16 @@ function setup(fetch, saved = null) {
   window.HTMLElement.prototype.scrollIntoView = () => {};
   window.scrollTo = () => {};
   window.AbortSignal = AbortSignal;
-  window.fetch = fetch;
+  // Account requests get neutral answers unless a test supplies its own.
+  window.fetch = async (url, init) => {
+    if (!account && String(url).startsWith("/api/preferences/"))
+      return reply({
+        quantity_unit: "",
+        delivery_area: null,
+        other_requirements: "",
+      });
+    return fetch(url, init);
+  };
   window.setInterval = () => 1;
   window.clearInterval = () => {};
   // Poll immediately instead of every two seconds.
@@ -789,4 +798,158 @@ test("the progress panel lists the research steps with their real status", async
     "waiting",
     "waiting",
   ]);
+});
+
+test("saved preferences prefill a new brief and are restored after a new search", async (t) => {
+  const calls = [];
+  const dom = setup(
+    async (url, init) => {
+      calls.push({ url, init });
+      if (url === "/api/preferences/")
+        return reply({
+          quantity_unit: "pallets",
+          delivery_area: { type: "continents", continents: ["Europe"] },
+          other_requirements: "ISO 9001 required",
+        });
+      if (init?.method === "POST")
+        return reply({ job_id: jobId, status: "queued" }, 202);
+      return reply(completedJob);
+    },
+    null,
+    true,
+  );
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  await settle(() => d.getElementById("other").value !== "");
+  assert.equal(d.getElementById("unit").value, "custom");
+  assert.equal(d.getElementById("unit-custom").value, "pallets");
+  assert.equal(text(d, "area-text"), "Europe");
+  assert.equal(d.getElementById("pref-other").value, "ISO 9001 required");
+  d.getElementById("product").value = "Steel bolts";
+  d.getElementById("quantity").value = "10";
+  submit(dom);
+  await settle(() => posts(calls).length === 1);
+  assert.deepEqual(posts(calls)[0].requirements, {
+    product: "Steel bolts",
+    quantity: 10,
+    quantity_unit: "pallets",
+    delivery_country: "Europe",
+    needed_by: null,
+    other_requirements: "ISO 9001 required",
+  });
+});
+
+test("preferences are saved with the chosen unit, destination and text", async (t) => {
+  const calls = [];
+  const empty = {
+    quantity_unit: "",
+    delivery_area: null,
+    other_requirements: "",
+  };
+  const dom = setup(
+    async (url, init) => {
+      calls.push({ url, init });
+      if (url === "/api/preferences/")
+        return reply(init?.method === "PUT" ? JSON.parse(init.body) : empty);
+      return reply({ features: [] });
+    },
+    null,
+    true,
+  );
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  const event = (type) =>
+    new dom.window.Event(type, { bubbles: true, cancelable: true });
+  await settle(() => calls.some((c) => c.url === "/api/preferences/"));
+  d.getElementById("pref-unit").value = "kg";
+  d.getElementById("pref-area-open").click();
+  d.getElementById("scope-world").checked = true;
+  d.getElementById("scope-world").dispatchEvent(event("change"));
+  d.getElementById("area-confirm").click();
+  d.getElementById("pref-other").value = "Samples required";
+  d.getElementById("preferences-form").dispatchEvent(event("submit"));
+  await settle(() => /Saved/.test(text(d, "pref-status")));
+  const put = calls.find((c) => c.init?.method === "PUT");
+  assert.deepEqual(JSON.parse(put.init.body), {
+    quantity_unit: "kg",
+    delivery_area: { type: "world" },
+    other_requirements: "Samples required",
+  });
+  // The default was chosen for Preferences and then applied to the empty brief.
+  assert.equal(text(d, "pref-area-text"), "Worldwide");
+  assert.equal(d.getElementById("unit").value, "kg");
+  assert.equal(d.getElementById("other").value, "Samples required");
+});
+
+test("history lists the account's searches and opens one in the workspace", async (t) => {
+  const calls = [];
+  const dom = setup(async (url, init) => {
+    calls.push({ url, init });
+    if (url === "/api/history/")
+      return reply({
+        searches: [
+          {
+            job_id: jobId,
+            product: "Food-grade aluminium containers",
+            created_at: "2026-11-14T10:00:00Z",
+            status: "completed",
+            suppliers: 3,
+            shortlisted: 1,
+          },
+        ],
+      });
+    if (url === "/api/suppliers/")
+      return reply({
+        suppliers: [
+          {
+            supplier_id: "alpha",
+            name: "<b>Example Alpha</b>",
+            website: "https://alpha.example/",
+            searches: 2,
+            last_seen: "2026-11-14T10:00:00Z",
+            last_product: "Containers",
+            last_job_id: jobId,
+            last_eligibility: "eligible",
+          },
+        ],
+      });
+    return reply(completedJob);
+  });
+  t.after(() => dom.window.close());
+  const d = dom.window.document;
+  dom.window.location.hash = "/suppliers";
+  await settle(() => !d.getElementById("suppliers-list").hidden);
+  assert.match(text(d, "suppliers-list"), /<b>Example Alpha<\/b>/);
+  assert.equal(d.querySelector("#suppliers-list b"), null);
+  assert.match(text(d, "suppliers-list"), /Found in 2 searches/);
+  assert.match(text(d, "suppliers-list"), /Eligible/);
+  dom.window.location.hash = "/history";
+  await settle(() => !d.getElementById("history-list").hidden);
+  assert.match(
+    text(d, "history-list"),
+    /Finished · 3 suppliers · 1 shortlisted/,
+  );
+  assert.equal(
+    d.querySelector("[data-nav=history]").getAttribute("aria-current"),
+    "page",
+  );
+  d.querySelector("#history-list button").click();
+  await settle(finished(d));
+  assert.equal(dom.window.location.hash, "#/results");
+  assert.equal(dom.window.localStorage.getItem("quotepilot-job"), jobId);
+  assert.equal(d.getElementById("product").value, submitted.product);
+});
+
+test("a signed-out answer sends the browser to the sign-in page", async (t) => {
+  const visited = [];
+  const dom = setup(
+    async () => reply({ error: "Sign in to continue." }, 401),
+    jobId,
+    true,
+  );
+  t.after(() => dom.window.close());
+  // jsdom cannot navigate; observe the attempt through the console it reports to.
+  dom.virtualConsole?.on("jsdomError", (e) => visited.push(String(e.message)));
+  await settle(() => visited.length > 0, "no navigation was attempted");
+  assert.match(visited.join(" "), /navigation/i);
 });
