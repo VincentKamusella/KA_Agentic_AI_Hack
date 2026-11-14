@@ -154,8 +154,17 @@ const actionButton = (action, label, primary) =>
     disabled: state.submitting,
     text: label,
   });
-const elapsedText = () =>
-  `${Math.floor((Date.now() - state.startedAt) / 1000)}s elapsed`;
+const elapsedText = () => {
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - state.startedAt) / 1000),
+  );
+  const duration =
+    seconds < 60
+      ? `${seconds}s`
+      : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `${duration} elapsed`;
+};
 
 function panel({ tone, title, text, working, detail, extra, actions = [] }) {
   const node = h("div", {
@@ -729,15 +738,24 @@ function renderResultsState() {
     const copy = h("div", { class: "loading-copy" }, ...loading.childNodes);
     const count =
       state.result?.coverage?.candidates_found ?? suppliersOf().length;
+    const status = h("div", { class: "loading-status" });
     if (count)
-      copy.append(
-        h("p", {
+      status.append(
+        h("span", {
           class: "loading-count",
-          text: `${plural(count, "supplier", "suppliers")} discovered · Not yet a final shortlist`,
+          text: `${plural(count, "supplier", "suppliers")} discovered`,
         }),
       );
     if (state.startedAt)
-      copy.append(h("span", { class: "elapsed", text: elapsedText() }));
+      status.append(h("span", { class: "elapsed", text: elapsedText() }));
+    if (status.childNodes.length) copy.append(status);
+    if (count)
+      copy.append(
+        h("p", {
+          class: "loading-note",
+          text: "Research in progress. This is not yet a final shortlist.",
+        }),
+      );
     loading.append(previews, copy);
     return box.append(loading);
   }
