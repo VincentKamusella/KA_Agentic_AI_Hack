@@ -1178,9 +1178,24 @@ function renderContactRecommendations() {
     const draft = recommendation.email_draft;
     article.append(
       h(
+        "div",
+        { class: "contact-outreach" },
+        h("a", {
+          class: "btn btn-primary contact-compose",
+          href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,
+          text: "Open in email app",
+        }),
+        h("p", {
+          class: "help",
+          text: "Add the recipient and send from your email app.",
+        }),
+      ),
+    );
+    article.append(
+      h(
         "details",
         { class: "contact-email", "data-key": key, open: expanded.has(key) },
-        h("summary", { text: "Review & email supplier" }),
+        h("summary", { text: "Preview draft" }),
         h(
           "div",
           { class: "block-head" },
@@ -1200,11 +1215,6 @@ function renderContactRecommendations() {
         h("p", {
           class: "help",
           text: "Add the recipient and review the message in your email app before sending.",
-        }),
-        h("a", {
-          class: "btn btn-primary contact-compose",
-          href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,
-          text: "Open in email app",
         }),
         h("textarea", {
           id,

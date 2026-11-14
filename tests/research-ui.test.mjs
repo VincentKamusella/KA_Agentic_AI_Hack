@@ -836,6 +836,7 @@ test("saved recommendations show contact priority, qualification, citations and 
   );
   assert.equal(d.getElementById("research-details").open, false);
   const compose = section.querySelector(".contact-compose");
+  assert.equal(compose.closest("details"), null);
   const mail = new URL(compose.href);
   assert.equal(mail.protocol, "mailto:");
   assert.equal(mail.searchParams.get("subject"), "Quotation request for alpha");

@@ -2093,13 +2093,9 @@ h2 {
   margin: 20px 0;
 }
 .contact-email > summary {
-  display: list-item;
   width: fit-content;
-  padding: 12px 18px;
-  border: 1px solid var(--qp-accent);
-  border-radius: 8px;
-  color: var(--qp-light);
-  background: var(--qp-accent);
+  color: var(--qp-muted);
+  cursor: pointer;
 }
 .contact-compose {
   margin: 12px 0 16px;
@@ -2158,9 +2154,12 @@ h2 {
   font-size: 0.875rem;
   margin-top: 20px;
 }
-.contact-item > .contact-email {
+.contact-outreach {
   border-top: 1px solid var(--qp-line);
-  padding-top: 20px;
+  padding-top: 12px;
+}
+.contact-item > .contact-email {
+  margin-top: 16px;
 }
 @media (max-width: 720px) {
   .contact-evaluation {
