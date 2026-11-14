@@ -12,7 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiError(Exception):
-    """Safe provider error, suitable for returning to the browser."""
+    """Safe provider error with transport metadata for bounded retries."""
+
+    def __init__(self, message, *, status_code=None, retry_after=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
 
 
 class GeminiClient:
@@ -40,7 +45,14 @@ class GeminiClient:
                 logger.info("Gemini response endpoint=%s http=%s elapsed=%.1fs", endpoint, response.status, time.monotonic() - started)
         except HTTPError as exc:
             logger.info("Gemini request failed endpoint=%s http=%s", endpoint, exc.code)
-            raise GeminiError(f"Gemini returned HTTP {exc.code}. Check API access, quota, and model availability; then retry.") from None
+            try:
+                retry_after = float(exc.headers.get("Retry-After", ""))
+            except (ValueError, TypeError):
+                retry_after = None
+            raise GeminiError(
+                f"Gemini returned HTTP {exc.code}. Check API access, quota, and model availability; then retry.",
+                status_code=exc.code, retry_after=retry_after,
+            ) from None
         except (URLError, TimeoutError, OSError):
             logger.info("Gemini transport failed endpoint=%s elapsed=%.1fs", endpoint, time.monotonic() - started)
             raise GeminiError("Gemini could not be reached. Please retry.") from None

@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'backend.apps.BackendConfig',
 ]
 
 MIDDLEWARE = [
@@ -155,3 +156,6 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "loggers": {"backend.gemini": {"handlers": ["console"], "level": "INFO", "propagate": False}},
 }
+
+# Bounded research payloads: 100 suppliers × 20 source passages.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16_000_000

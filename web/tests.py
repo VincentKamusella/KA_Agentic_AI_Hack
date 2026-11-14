@@ -71,3 +71,49 @@ class DeploymentSmokeTests(SimpleTestCase):
         payload = {**demo_fixture()['request'], 'demo': True}
         result = self.client.post('/api/discover/', data=json.dumps(payload), content_type='application/json')
         self.assertEqual(result.status_code, 400)
+
+
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
+class ResearchApiTests(SimpleTestCase):
+    def test_background_discovery_accepts_larger_budgets(self):
+        payload = demo_fixture()['request']
+        payload['options'] = {'max_suppliers': 100, 'max_pages_per_supplier': 20, 'max_queries': 24}
+        with patch('backend.jobs.start_job', return_value='a' * 64) as start, patch('backend.research.ResearchStore'):
+            response = self.client.post('/api/research/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(start.call_args.args[1].options.max_suppliers, 100)
+
+    def test_background_endpoints_require_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        for url in ['/api/research/', '/api/evaluate-jobs/']:
+            self.assertEqual(client.post(url, data='{}', content_type='application/json').status_code, 403)
+
+    def test_status_is_private_and_missing_jobs_return_404(self):
+        with patch('backend.research.ResearchStore') as store:
+            store.return_value.get.return_value = None
+            self.assertEqual(self.client.get('/api/research/unknown/').status_code, 404)
+            store.return_value.get.return_value = {'status': 'completed', 'result': {'suppliers': []}}
+            response = self.client.get('/api/research/' + 'a' * 64 + '/')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['Cache-Control'], 'no-store')
+
+    def test_concurrency_capacity_returns_actionable_error(self):
+        with patch('backend.jobs.start_job', side_effect=RuntimeError('Two research jobs are already running.')):
+            response = self.client.post('/api/research/', data=json.dumps(demo_fixture()['request']), content_type='application/json')
+        self.assertEqual(response.status_code, 429)
+
+    def test_search_scope_validation(self):
+        for options in [{'max_queries': 25}, {'countries': ['']}, {'languages': ['x'] * 9}]:
+            payload = demo_fixture()['request'] | {'options': options}
+            response = self.client.post('/api/research/', data=json.dumps(payload), content_type='application/json')
+            self.assertEqual(response.status_code, 400)
+
+
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
+                   DATA_UPLOAD_MAX_MEMORY_SIZE=100)
+class BodyLimitTests(SimpleTestCase):
+    def test_oversized_body_returns_json_413_for_both_api_styles(self):
+        for endpoint in ('/api/research/', '/api/evaluate-jobs/', '/api/discover/', '/api/evaluate/'):
+            response = self.client.post(endpoint, data='x' * 101, content_type='application/json')
+            self.assertEqual(response.status_code, 413)
+            self.assertEqual(response.json()['error'], 'Request is too large.')

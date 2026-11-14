@@ -2,6 +2,9 @@
 const $ = (id) => document.getElementById(id);
 let suppliers = [],
   discoveryIssues = [],
+  coverage = null,
+  discoveryJobId = null,
+  coverageRenderKey = "",
   evaluation = null,
   busy = false,
   criterionCounter = 0;
@@ -161,12 +164,16 @@ function updateTotals() {
     evaluation?.recommended_supplier_ids.length || 0;
 }
 function invalidate(discovery = false) {
+  if (discovery) rememberJob(null);
   evaluation = null;
   $("recommendation").hidden = true;
   $("comparison").replaceChildren();
   if (discovery) {
     suppliers = [];
     discoveryIssues = [];
+    coverage = null;
+    discoveryJobId = null;
+    $("coverage").hidden = true;
     $("sources").replaceChildren();
     $("candidates").replaceChildren();
     $("content").hidden = true;
@@ -263,8 +270,9 @@ async function post(stage) {
       },
       body: JSON.stringify({
         requirements: readRequirements(),
-        options: { max_suppliers: 6, max_pages_per_supplier: 4 },
-        suppliers: stage === "evaluate" ? suppliers : [],
+        options: readOptions(),
+        discovery_job_id: discoveryJobId,
+        suppliers: stage === "evaluate-jobs" ? suppliers : [],
       }),
       signal: controller.signal,
     });
@@ -312,7 +320,7 @@ function renderEvidence(evidence, parent) {
     a,
     el(
       "small",
-      `Cited AI summary · collected ${new Date(evidence.fetched_at).toLocaleDateString()}`,
+      `${evidence.kind === "search_summary" ? "Legacy search summary" : evidence.kind === "pdf" ? "PDF source passage" : "Source passage"} · retrieved ${new Date(evidence.fetched_at).toLocaleString()}`,
     ),
   );
   parent.append(box);
@@ -401,6 +409,15 @@ function render() {
   for (const s of suppliers) {
     const panel = accordion(s.name, "supplier"),
       details = panel.body;
+    if (s.discovered_by?.length) {
+      details.append(
+        el(
+          "p",
+          `Found by ${s.discovered_by.length} search passes. ${s.legal_id ? `Site-reported VAT ID: ${s.legal_id}. ` : ""}Identity still requires human verification.`,
+          "help",
+        ),
+      );
+    }
     const a = assessments.get(s.supplier_id);
     if (a) {
       for (const c of a.criteria) {
@@ -463,9 +480,14 @@ $("requirements").addEventListener("submit", async (event) => {
   setBusy(true, "Searching supplier sources with Gemini…");
   notice("Searching supplier sources with Gemini…");
   try {
-    const result = await post("discover");
+    const job = await post("research");
+    discoveryJobId = job.job_id;
+    rememberJob(job.job_id);
+    const result = await pollResearch(job.job_id);
     suppliers = result.suppliers;
     discoveryIssues = result.issues;
+    coverage = result.coverage;
+    renderCoverage();
     render();
     step(suppliers.length ? "eval" : "discover");
     notice(
@@ -492,7 +514,9 @@ $("evaluate").addEventListener("click", async () => {
   setWorkspaceState("evaluating");
   setBusy(true, "Evaluating evidence against your criteria…");
   try {
-    evaluation = await post("evaluate");
+    const job = await post("evaluate-jobs");
+    rememberJob(job.job_id);
+    evaluation = await pollResearch(job.job_id);
     suppliers = evaluation.suppliers;
     render();
     step("shortlist");
@@ -519,7 +543,17 @@ $("add").addEventListener("click", () => {
     $("criteria").lastChild.querySelector("textarea").focus();
   }
 });
-for (const id of ["product", "quantity", "country"])
+for (const id of [
+  "product",
+  "quantity",
+  "country",
+  "supplier-budget",
+  "query-budget",
+  "page-budget",
+  "search-countries",
+  "search-languages",
+  "refresh-sources",
+])
   $(id).addEventListener("input", () => invalidate(true));
 function reset(navigate = true) {
   if (busy) return;
@@ -590,7 +624,10 @@ function renderCandidates() {
     const description = el("div");
     description.append(
       el("h3", supplier.name),
-      el("p", `${supplier.evidence.length} source excerpts collected`),
+      el(
+        "p",
+        `${supplier.evidence.length} source passages · ${supplier.crawl_status || "pending"} · ${supplier.identity_status === "site_identified" ? "identity from site metadata" : "identity needs verification"}`,
+      ),
     );
     const link = el("a", "Review evidence", "btn btn-outline-secondary btn-sm");
     link.href = "#/evidence";
@@ -601,5 +638,190 @@ function renderCandidates() {
 window.addEventListener("hashchange", () => showView());
 $("retry").addEventListener("click", () => $("requirements").requestSubmit());
 $("reset").addEventListener("click", () => reset());
+const savedJob = recalledJob();
 showView(false);
 reset(false);
+if (savedJob) restoreResearch(savedJob);
+
+function readOptions() {
+  const terms = (id) =>
+    $(id)
+      .value.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  return {
+    max_suppliers: Number($("supplier-budget").value),
+    max_queries: Number($("query-budget").value),
+    max_pages_per_supplier: Number($("page-budget").value),
+    countries: terms("search-countries"),
+    languages: terms("search-languages"),
+    refresh: $("refresh-sources").checked,
+  };
+}
+function rememberJob(id) {
+  try {
+    if (id) localStorage.setItem("quotepilot-job", id);
+    else localStorage.removeItem("quotepilot-job");
+  } catch {
+    notice(
+      "Browser storage is unavailable. Keep this tab open to retain your research link.",
+    );
+  }
+}
+function recalledJob() {
+  try {
+    return localStorage.getItem("quotepilot-job");
+  } catch {
+    return null;
+  }
+}
+function renderCoverage() {
+  const root = $("coverage");
+  root.hidden = !coverage;
+  if (!coverage) return;
+  const renderKey = JSON.stringify([discoveryJobId, coverage]);
+  if (renderKey === coverageRenderKey) return;
+  coverageRenderKey = renderKey;
+  const expanded = root.querySelector("details")?.open || false;
+  root.replaceChildren();
+  const stop = {
+    searching: "Searching",
+    query_budget: "Search budget reached",
+    diminishing_returns: "Recent searches found no new suppliers",
+  };
+  root.append(
+    el("h3", "Research coverage"),
+    el(
+      "p",
+      `${coverage.queries.length} search passes · ${coverage.candidates_found} candidates found · ${coverage.researched} researched · ${coverage.pending} not researched. ${stop[coverage.stop_reason] || coverage.stop_reason}. This is not an exhaustive supplier list.`,
+    ),
+  );
+  const details = el("details"),
+    summary = el("summary", "Inspect searches and new suppliers");
+  details.open = expanded;
+  details.append(summary);
+  for (const q of coverage.queries) {
+    details.append(
+      el(
+        "p",
+        `${q.query}: ${q.new_suppliers} new, ${q.duplicate_suppliers} duplicates${q.failed ? " · search failed" : ""}${q.cached ? " · cached" : ""}${q.unresolved_citations ? ` · ${q.unresolved_citations} unresolved citations` : ""}.`,
+      ),
+    );
+    if (q.actual_queries.length)
+      details.append(
+        el("small", `Search terms: ${q.actual_queries.join("; ")}`),
+      );
+  }
+  root.append(details);
+  if (discoveryJobId) {
+    const download = el(
+      "a",
+      "Download research JSON",
+      "btn btn-outline-secondary btn-sm mt-2",
+    );
+    download.href = `/api/research/${encodeURIComponent(discoveryJobId)}/`;
+    download.download = "supplier-research.json";
+    root.append(download);
+  }
+}
+async function fetchResearch(id) {
+  const response = await fetch(`/api/research/${encodeURIComponent(id)}/`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20000),
+  });
+  const job = await response.json();
+  if (!response.ok) throw new Error(job.error || "Could not load research.");
+  return job;
+}
+async function pollResearch(id) {
+  for (;;) {
+    const job = await fetchResearch(id);
+    if (job.result?.coverage) {
+      coverage = job.result.coverage;
+      renderCoverage();
+      $("loading-message").textContent =
+        `${coverage.queries.length} searches · ${coverage.researched} candidates researched`;
+    } else if (job.result?.assessments) {
+      $("loading-message").textContent =
+        `${job.result.assessments.length} suppliers assessed`;
+    }
+    if (job.status === "completed") return job.result;
+    if (job.status !== "running") {
+      if (job.result?.suppliers) {
+        suppliers = job.result.suppliers;
+        discoveryIssues = job.result.issues || [];
+        if (job.request.stage === "evaluate") evaluation = job.result;
+        render();
+      }
+      throw new Error(
+        job.error || "Research was interrupted. Retry to reuse saved work.",
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+async function restoreResearch(id) {
+  setBusy(true, "Restoring saved research…");
+  rememberJob(id);
+  try {
+    const job = await fetchResearch(id),
+      request = job.request;
+    $("product").value = request.requirements.product;
+    $("quantity").value = request.requirements.quantity;
+    $("country").value = request.requirements.delivery_country;
+    $("criteria").replaceChildren();
+    request.requirements.criteria.forEach(addCriterion);
+    for (const [field, key] of [
+      ["supplier-budget", "max_suppliers"],
+      ["query-budget", "max_queries"],
+      ["page-budget", "max_pages_per_supplier"],
+    ]) {
+      const value = String(request.options[key]);
+      if (![...$(field).options].some((option) => option.value === value)) {
+        const option = el("option", value);
+        option.value = value;
+        $(field).append(option);
+      }
+      $(field).value = value;
+    }
+    $("search-countries").value = request.options.countries.join(", ");
+    $("search-languages").value = request.options.languages.join(", ");
+    $("refresh-sources").checked = request.options.refresh;
+    setBusy(true);
+    setWorkspaceState(
+      request.stage === "evaluate" ? "evaluating" : "searching",
+    );
+    discoveryJobId =
+      request.stage === "evaluate" ? request.discovery_job_id : id;
+    const result = await pollResearch(id);
+    suppliers = result.suppliers;
+    if (request.stage === "evaluate") {
+      evaluation = result;
+      discoveryJobId = request.discovery_job_id;
+      if (discoveryJobId) {
+        try {
+          const discovery = await fetchResearch(discoveryJobId);
+          coverage = discovery.result?.coverage;
+          discoveryIssues = discovery.result?.issues || [];
+        } catch {
+          error(
+            "Evaluation restored, but search coverage could not be loaded. Reload to retry.",
+          );
+        }
+      }
+    } else {
+      discoveryJobId = id;
+      discoveryIssues = result.issues;
+      coverage = result.coverage;
+    }
+    renderCoverage();
+    render();
+    step(evaluation ? "shortlist" : suppliers.length ? "eval" : "discover");
+    notice("Saved research restored.");
+  } catch (e) {
+    error(`${e.message} Reload to reconnect, or start a new search.`);
+    setWorkspaceState("discoveryError");
+  } finally {
+    setBusy(false);
+  }
+}

@@ -35,6 +35,10 @@ class Evidence(Contract):
     source_url: HttpUrl
     excerpt: str = Field(min_length=1)
     fetched_at: AwareDatetime
+    title: str = ""
+    content_hash: str = ""
+    requested_url: HttpUrl | None = None
+    kind: Literal["page", "pdf", "search_summary"] = "search_summary"
 
 
 class SupplierEvidence(Contract):
@@ -42,6 +46,12 @@ class SupplierEvidence(Contract):
     name: str = Field(min_length=1)
     website: HttpUrl
     evidence: list[Evidence] = Field(default_factory=list)
+    discovered_by: list[str] = Field(default_factory=list)
+    source_urls: list[HttpUrl] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+    legal_id: str | None = None
+    identity_status: Literal["unverified", "site_identified"] = "unverified"
+    crawl_status: Literal["pending", "complete", "partial", "unavailable"] = "pending"
 
 
 class CriterionAssessment(Contract):
@@ -94,11 +104,51 @@ class PipelineIssue(Contract):
 
 
 class DiscoveryOptions(Contract):
-    max_suppliers: int = Field(default=20, ge=1, le=100, strict=True)
+    max_suppliers: int = Field(default=30, ge=1, le=100, strict=True)
     max_pages_per_supplier: int = Field(default=5, ge=1, le=20, strict=True)
+    max_queries: int = Field(default=8, ge=1, le=24, strict=True)
+    search_concurrency: int | None = Field(default=None, ge=1, le=24, strict=True)
+    max_depth: int = Field(default=2, ge=0, le=3, strict=True)
+    countries: list[str] = Field(default_factory=list, max_length=8)
+    languages: list[str] = Field(default_factory=lambda: ["English", "local language"], max_length=8)
+    saturation_queries: int = Field(default=3, ge=2, le=8, strict=True)
+    refresh: bool = False
+
+    @model_validator(mode="after")
+    def bounded_terms(self):
+        if any(not term.strip() or len(term) > 100 for term in self.countries + self.languages):
+            raise ValueError("Search countries and languages must contain 1–100 characters")
+        return self
+
+
+class QueryCoverage(Contract):
+    query: str
+    country: str
+    language: str
+    source_type: str
+    actual_queries: list[str] = Field(default_factory=list)
+    candidates_found: int = 0
+    new_suppliers: int = 0
+    duplicate_suppliers: int = 0
+    unresolved_citations: int = 0
+    cached: bool = False
+    failed: bool = False
+
+
+class DiscoveryCoverage(Contract):
+    queries: list[QueryCoverage] = Field(default_factory=list)
+    candidates_found: int = 0
+    researched: int = 0
+    pending: int = 0
+    source_pages: int = 0
+    directory_urls: list[str] = Field(default_factory=list)
+    stop_reason: str = "searching"
+    exhaustive: bool = False
 
 
 class DiscoveryResult(Contract):
+    deferred_suppliers: list[SupplierEvidence] = Field(default_factory=list)
+    coverage: DiscoveryCoverage = Field(default_factory=DiscoveryCoverage)
     suppliers: list[SupplierEvidence] = Field(default_factory=list)
     issues: list[PipelineIssue] = Field(default_factory=list)
 

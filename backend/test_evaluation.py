@@ -2,8 +2,8 @@ import asyncio
 import copy
 import unittest
 
-from backend.contracts import DiscoveryOptions, Requirements, SupplierEvidence
-from backend.discovery import citations_to_suppliers
+from backend.contracts import Requirements, SupplierEvidence
+from backend.discovery import extract_candidates
 from backend.evaluation import GeminiEvaluator
 from backend.gemini import GeminiError
 from backend.pipeline import Recommender
@@ -105,19 +105,19 @@ class EvaluationTests(unittest.TestCase):
         result = self.run_eval(FakeClient({'c2_e0':'unknown'})).assessments[0]
         self.assertEqual(result.preference_score, 25)
 
-    def test_discovery_accepts_only_cited_text_and_deduplicates(self):
+    def test_discovery_accepts_cited_urls_as_leads_only_and_deduplicates(self):
         response = {'steps':[{'type':'model_output','content':[{
             'type':'text','text':'We make bolts. Unsupported claims.',
             'annotations': [dict(type='url_citation',url='https://alpha.example/about',start_index=0,end_index=14)] * 2
         }]}]}
-        result = citations_to_suppliers(response, DiscoveryOptions())
-        self.assertEqual(len(result.suppliers), 1)
-        self.assertEqual(len(result.suppliers[0].evidence), 1)
-        self.assertEqual(result.suppliers[0].evidence[0].excerpt, 'We make bolts.')
+        suppliers, _ = extract_candidates(response, "bolts")
+        self.assertEqual(len(suppliers), 1)
+        self.assertEqual(len(suppliers[0].source_urls), 1)
+        self.assertEqual(suppliers[0].evidence, [])
         broken = copy.deepcopy(response)
         broken['steps'][0]['content'][0]['annotations'][0]['url'] = 'javascript:alert(1)'
         broken['steps'][0]['content'][0]['annotations'].pop()
-        self.assertFalse(citations_to_suppliers(broken, DiscoveryOptions()).suppliers)
+        self.assertFalse(extract_candidates(broken, "bolts")[0])
 
 
 class CitationRedirectTests(unittest.TestCase):

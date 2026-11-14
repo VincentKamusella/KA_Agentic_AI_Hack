@@ -3,6 +3,7 @@
     "bootstrap": "5.3.9"
   },
   "devDependencies": {
+    "jsdom": "^31.0.1",
     "prettier": "3.10.1"
   },
   "name": "quotepilot-ui",
@@ -10,6 +11,7 @@
   "scripts": {
     "build": "node scripts/vendor-ui.mjs",
     "format": "prettier --write web/static/web scripts/vendor-ui.mjs",
-    "check": "prettier --check web/static/web scripts/vendor-ui.mjs && node --check web/static/web/app.js"
+    "check": "prettier --check web/static/web scripts/vendor-ui.mjs && node --check web/static/web/app.js",
+    "test": "node --test tests/*.test.mjs"
   }
 }
