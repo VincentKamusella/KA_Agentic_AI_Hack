@@ -588,8 +588,7 @@ function renderBriefNote() {
       "Research for this brief is running. The form is locked until it finishes.";
     links = [link("results", "View progress")];
   } else if (state.status === "completed") {
-    text =
-      "Your latest search is saved. Changing these details and choosing Find my shortlist starts new research and reads your requirements again.";
+    text = "Change your brief to start a new supplier search.";
     links = [
       link("results", "View shortlist"),
       suppliersOf().length ? link("sources", "View sources") : null,
@@ -664,7 +663,7 @@ function renderResultsState() {
     return box.append(
       panel({
         title: "No research yet",
-        text: "Fill in the brief and choose Find my shortlist. Progress and results appear here.",
+        text: "Describe what you need to find suppliers.",
         actions: [linkButton("brief", "Go to the brief", true)],
       }),
     );
@@ -2478,7 +2477,7 @@ function placeName(address) {
 
 function setArea(value) {
   area = value;
-  const text = value ? areaLabel(value) : "Select on the map";
+  const text = value ? areaLabel(value) : "Choose destination";
   $("area-text").textContent = text;
   $("area-open").title = value ? text : "";
   $("area-open").classList.toggle("is-empty", !value);

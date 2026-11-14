@@ -2245,3 +2245,45 @@ h2 {
     margin-top: 16px;
   }
 }
+/* Keep brief labels and controls on a consistent grid. */
+.brief-form .form-label {
+  display: block;
+}
+.brief-form .form-block {
+  padding: 0 0 24px;
+  border-top: 0;
+}
+.brief-form #other-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.brief-form .optional {
+  border: 0;
+  padding: 0;
+  vertical-align: baseline;
+  font-weight: 400;
+}
+.brief-form .field-date {
+  margin-top: 0;
+}
+.brief-form .area-button,
+.brief-form .input-group > .form-control,
+.brief-form .input-group > .form-select {
+  min-height: 44px;
+}
+.brief-form .action-bar {
+  padding-top: 0;
+  border-top: 0;
+}
+#view-brief .page-head {
+  max-width: 860px;
+}
+@media (max-width: 720px) {
+  .brief-form .field-date {
+    max-width: none;
+  }
+  .brief-form .field-row {
+    row-gap: 0;
+  }
+}
