@@ -1,0 +1,13 @@
+# Single-workspace format used by Codesphere's official Python template.
+prepare:
+  steps:
+    - name: Prepare Django application
+      command: bash scripts/prepare.sh
+test:
+  steps:
+    - name: Check application
+      command: bash scripts/check.sh
+run:
+  steps:
+    - name: Run Django with Gunicorn
+      command: bash scripts/start.sh

@@ -1,0 +1,16 @@
+[project]
+name = "quotepilot"
+version = "0.1.0"
+description = "QuotePilot development foundation"
+requires-python = ">=3.12"
+dependencies = [
+    "dj-database-url>=3,<4",
+    "Django>=5.2.19,<5.3",
+    "gunicorn>=23,<24",
+    "psycopg[binary]>=3.2,<4",
+    "python-dotenv>=1.2.4,<2",
+    "whitenoise>=6.9,<7",
+]
+
+[tool.uv]
+package = false
