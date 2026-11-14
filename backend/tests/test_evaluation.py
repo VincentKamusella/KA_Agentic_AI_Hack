@@ -276,3 +276,45 @@ class CitationRedirectTests(unittest.TestCase):
             for url in ["http://127.0.0.1/private", "https://vertexaisearch.cloud.google.com.evil.test/grounding-api-redirect/test"]:
                 self.assertEqual(resolve_google_citation(url), url)
             factory.assert_not_called()
+
+
+class CriteriaSuggesterTests(unittest.TestCase):
+    def test_suggest_criteria_parses_and_normalizes_suggestions(self):
+        import json
+        from backend.contracts import SuggestCriteriaRequest
+        from backend.criteria import GeminiCriteriaSuggester
+
+        class Client:
+            async def post(self, endpoint, payload):
+                self.endpoint = endpoint
+                self.payload = payload
+                return {
+                    'status': 'completed',
+                    'steps': [{'type': 'model_output', 'content': [{
+                        'type': 'text',
+                        'text': json.dumps({'criteria': [
+                            {'id': 'ISO 9001!', 'description': 'Holds ISO 9001 certification.', 'kind': 'mandatory', 'weight': 5},
+                            {'id': 'ISO 9001!', 'description': 'Ships to Germany within 2 weeks.', 'kind': 'preference', 'weight': 2.5},
+                        ]}),
+                    }]}],
+                }
+
+        client = Client()
+        result = asyncio.run(GeminiCriteriaSuggester(client).suggest_criteria(
+            SuggestCriteriaRequest(product='Steel bolts', quantity=1000, delivery_country='Germany')))
+        self.assertEqual(client.endpoint, 'interactions')
+        self.assertEqual([c.id for c in result.criteria], ['iso-9001', 'iso-9001-2'])
+        self.assertEqual(result.criteria[0].weight, 1.0)
+        self.assertEqual(result.criteria[1].weight, 2.5)
+
+    def test_suggest_criteria_rejects_empty_or_incomplete_response(self):
+        from backend.contracts import SuggestCriteriaRequest
+        from backend.criteria import GeminiCriteriaSuggester
+
+        class IncompleteClient:
+            async def post(self, endpoint, payload):
+                return {'status': 'failed', 'steps': []}
+
+        with self.assertRaises(GeminiError):
+            asyncio.run(GeminiCriteriaSuggester(IncompleteClient()).suggest_criteria(
+                SuggestCriteriaRequest(product='Steel bolts')))

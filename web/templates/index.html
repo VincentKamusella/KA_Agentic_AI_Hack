@@ -44,8 +44,15 @@
 </form>
 <ol class="stages" aria-label="Workflow"><li id="stage-discover" aria-current="step"><span>1</span>Discovery</li><li id="stage-eval"><span>2</span>Evaluation</li><li id="stage-shortlist"><span>3</span>Shortlist</li></ol>
 <div class="workspace">
-<aside class="criteria-panel"><div class="section-heading"><h2>Decision criteria</h2><button id="add" type="button" class="btn btn-link btn-sm p-0">Add</button></div>
-<p class="help">Mandatory requirements are gates. Preferences rank suppliers that pass.</p><div id="criteria"></div>
+<aside class="criteria-panel"><div class="section-heading"><h2>Decision criteria</h2><div class="criteria-actions"><button id="suggest" type="button" class="btn btn-link btn-sm p-0">Suggest</button><button id="add" type="button" class="btn btn-link btn-sm p-0">Add</button></div></div>
+<p class="help">Mandatory requirements are gates. Preferences rank suppliers that pass.</p>
+<div id="suggested-box" class="suggested-box" hidden>
+<div class="suggested-head"><span>Suggested for your brief</span><button id="select-all-suggestions" type="button" class="btn btn-link btn-sm p-0" hidden>Select all</button></div>
+<p id="suggested-status" class="help" role="status" aria-live="polite"></p>
+<div id="suggested-criteria" class="suggested-list"></div>
+</div>
+<div id="criteria"></div>
+<p id="criteria-empty" class="help">Choose suggested criteria above or click Add to write your own for evaluation.</p>
 <p class="help">Quantity and destination guide discovery. Add explicit criteria to assess them.</p>
 <p class="footnote">No orders placed.<br>No supplier messages sent.</p></aside>
 <section class="results" aria-labelledby="results-title">

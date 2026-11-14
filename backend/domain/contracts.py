@@ -178,3 +178,13 @@ class RecommendResponse(Contract):
     assessments: list[SupplierAssessment]
     recommended_supplier_ids: list[str] = Field(max_length=3)
     issues: list[PipelineIssue] = Field(default_factory=list)
+
+
+class SuggestCriteriaRequest(Contract):
+    product: str = Field(min_length=1, max_length=1000)
+    quantity: int | None = Field(default=None, gt=0, strict=True)
+    delivery_country: str = Field(default="", max_length=100)
+
+
+class SuggestCriteriaResponse(Contract):
+    criteria: list[Criterion] = Field(default_factory=list, max_length=8)
