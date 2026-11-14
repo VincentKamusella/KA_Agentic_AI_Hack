@@ -2107,3 +2107,69 @@ h2 {
 .contact-evaluation > summary {
   color: var(--qp-muted);
 }
+
+#contact-title {
+  font-size: clamp(1.5rem, 2.5vw, 1.75rem);
+  line-height: 1.25;
+}
+.contact-intro {
+  color: var(--qp-muted);
+  max-width: 60ch;
+  margin: 8px 0 0;
+}
+
+.contact-heading h3 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+.contact-evaluation {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 32px;
+  margin: 28px 0;
+}
+.contact-evaluation h4 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+.contact-evaluation ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.contact-evaluation li + li {
+  margin-top: 20px;
+}
+.contact-evaluation p {
+  margin-bottom: 6px;
+}
+.contact-evaluation .contact-citations {
+  font-size: 0.8125rem;
+}
+.contact-checks {
+  border-left: 1px solid var(--qp-line);
+  padding-left: 28px;
+}
+.contact-checks h4 {
+  color: var(--qp-unknown);
+}
+.contact-question-note {
+  color: var(--qp-muted);
+  font-size: 0.875rem;
+  margin-top: 20px;
+}
+.contact-item > .contact-email {
+  border-top: 1px solid var(--qp-line);
+  padding-top: 20px;
+}
+@media (max-width: 720px) {
+  .contact-evaluation {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .contact-checks {
+    border-left: 0;
+    border-top: 1px solid var(--qp-line);
+    padding: 24px 0 0;
+  }
+}

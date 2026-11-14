@@ -1009,6 +1009,7 @@ function clarificationDraft(supplier, unknown, r) {
 const detailTargets = new Map();
 
 function renderContactRecommendations() {
+  $("recommendation-overview")?.remove();
   const host = $("contact-recommendations");
   const report = state.result?.recommendation_report;
   const issue = (state.result?.issues || []).find(
@@ -1026,7 +1027,7 @@ function renderContactRecommendations() {
     h(
       "div",
       { class: "block-head" },
-      h("h2", { id: "contact-title", text: "Who to contact" }),
+      h("h2", { id: "contact-title", text: "Suppliers to contact" }),
     ),
   );
   if (!report) {
@@ -1057,19 +1058,21 @@ function renderContactRecommendations() {
     );
     return;
   }
-  host.append(
-    h(
-      "details",
-      { class: "contact-overview" },
-      h("summary", { text: "Research overview" }),
-      h("p", { class: "contact-summary", text: report.summary }),
-    ),
-  );
-  if (report.no_eligible_suppliers)
+  const researchDetails = $("research-details");
+  if (researchDetails)
+    researchDetails.append(
+      h(
+        "div",
+        { id: "recommendation-overview", class: "content-block" },
+        h("h2", { text: "Recommendation summary" }),
+        h("p", { class: "contact-summary", text: report.summary }),
+      ),
+    );
+  if (report.no_eligible_suppliers && report.recommendations.length)
     host.append(
       h("p", {
-        class: "contact-warning",
-        text: "No supplier meets all documented must-haves. These are outreach suggestions, not confirmed matches.",
+        class: "contact-intro",
+        text: "These suppliers still need to confirm your requirements.",
       }),
     );
   if (!report.recommendations.length) {
@@ -1082,12 +1085,6 @@ function renderContactRecommendations() {
     );
     return;
   }
-  host.append(
-    h("p", {
-      class: "help",
-      text: "Review before sending. Add the recipient in your email app.",
-    }),
-  );
   const list = h("div", {
     class: "contact-list",
     "aria-label": "Supplier recommendations",
@@ -1140,42 +1137,42 @@ function renderContactRecommendations() {
         ),
       ),
     );
+    const reasons = article.querySelector(".contact-reasons");
+    const strengths = h(
+      "section",
+      { class: "contact-strengths" },
+      h("h4", { text: "Why consider this supplier" }),
+      reasons,
+    );
+    const checks = h(
+      "section",
+      { class: "contact-checks" },
+      h("h4", { text: "What to check before ordering" }),
+    );
     if (recommendation.tradeoffs.length)
-      article.append(
-        h("h4", { text: "Trade-offs" }),
+      checks.append(
         h(
           "ul",
           null,
           recommendation.tradeoffs.map((text) => h("li", { text })),
         ),
       );
-    const evaluationKey = `${supplier.supplier_id}-evaluation`;
-    const evaluation = h(
-      "details",
-      {
-        class: "contact-evaluation",
-        "data-key": evaluationKey,
-        open: expanded.has(evaluationKey),
-      },
-      h("summary", { text: "Evidence & trade-offs" }),
-    );
-    // Keep the qualification visible; put the supporting research one click away.
-    [...article.children].slice(1).forEach((node) => evaluation.append(node));
-    if (recommendation.reasons[0])
-      article.append(
+    else
+      checks.append(
         h("p", {
-          class: "contact-verdict",
-          text: recommendation.reasons[0].text,
+          text: "Confirm current pricing, availability and delivery with the supplier.",
         }),
       );
     if (recommendation.verification_questions.length)
-      article.append(
+      checks.append(
         h("p", {
-          class: "contact-warning",
+          class: "contact-question-note",
           text: `${plural(recommendation.verification_questions.length, "open question", "open questions")} for the supplier — included in the email draft.`,
         }),
       );
-    article.append(evaluation);
+    article.append(
+      h("div", { class: "contact-evaluation" }, strengths, checks),
+    );
     const key = `${supplier.supplier_id}-email`;
     const id = `contact-email-${index}`;
     const draft = recommendation.email_draft;
@@ -1200,6 +1197,10 @@ function renderContactRecommendations() {
             h("span", { text: "Copy draft" }),
           ),
         ),
+        h("p", {
+          class: "help",
+          text: "Add the recipient and review the message in your email app before sending.",
+        }),
         h("a", {
           class: "btn btn-primary contact-compose",
           href: `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`,

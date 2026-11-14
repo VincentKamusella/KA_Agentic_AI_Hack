@@ -939,7 +939,11 @@ test("recommendation text is untrusted and blocked clipboard access has a manual
   const section = d.getElementById("contact-recommendations");
   assert.equal(section.querySelector("img, script"), null);
   assert.equal(section.querySelector('a[href^="javascript:"]'), null);
-  assert.match(section.textContent, /<img/);
+  assert.match(d.getElementById("recommendation-overview").textContent, /<img/);
+  assert.equal(
+    d.getElementById("recommendation-overview").querySelector("img"),
+    null,
+  );
   section.querySelector('[data-action="copy"]').click();
   await settle(() => /Copying is blocked/.test(text(d, "notice")));
   assert.equal(d.activeElement.id, "contact-email-0");

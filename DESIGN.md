@@ -53,3 +53,5 @@ Supplier recommendations use a deck: one complete card is visible at a time, wit
 The results page prioritizes reviewing supplier cards and opening quotation drafts in an email app. Detailed comparisons, requirements, grading metrics and research notes live in a collapsed Research details section. Each card keeps its qualification and leading reason visible, with evidence and questions on demand. Email drafts can be opened via mailto or copied; recipients are entered in the email app, and the app itself does not send messages.
 
 The results view omits the purchase-summary bar. Edit brief and View sources links remain inside Research details.
+
+Recommendation cards show evidence by default in two groups: Why consider this supplier and What to check before ordering. These are side by side on desktop and stacked on mobile; citations are secondary, and the email action follows below. The section introduction contains only a heading and one short qualification message when needed.
