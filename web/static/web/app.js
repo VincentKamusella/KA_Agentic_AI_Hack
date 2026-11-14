@@ -122,8 +122,10 @@ function setBusy(value, message = "") {
     value && suppliers.length
       ? "Evaluating…"
       : evaluation
-        ? "Update shortlist"
-        : "Update shortlist";
+        ? "Re-run evaluation →"
+        : "Evaluate suppliers →";
+  $("reevaluate").textContent =
+    value && suppliers.length ? "Evaluating…" : "Re-run evaluation";
   if (value) {
     $("workspace-state").scrollIntoView({
       block: "nearest",
@@ -144,9 +146,46 @@ function setBusy(value, message = "") {
   if (message) notice(message);
   $("content").setAttribute("aria-busy", String(value));
 }
+function clearSuggestions() {
+  clearTimeout(suggestTimer);
+  suggestAbort?.abort();
+  suggestAbort = null;
+  suggestedBriefKey = "";
+  $("suggested-criteria").replaceChildren();
+  $("suggested-status").textContent = "";
+  $("suggested-box").hidden = true;
+  $("select-all-suggestions").hidden = true;
+}
 function updateCriteriaHint() {
-  $("criteria-empty").hidden = $("criteria").children.length > 0;
-  $("add").disabled = busy || $("criteria").children.length >= 12;
+  const rows = [...$("criteria").children];
+  $("criteria-empty").hidden = rows.length > 0;
+  $("add").disabled = busy || rows.length >= 12;
+  $("suggest").hidden = !suppliers.length;
+  $("active-criteria-count").textContent = `${rows.length}`;
+  $("criteria-sync-note").hidden = !(suppliers.length && !evaluation);
+  rows.forEach((row, index) => {
+    const kind = row.querySelector("select").value;
+    const weight = Number(row.querySelector("input").value) || 1;
+    const tag = row.querySelector(".criterion-role");
+    const num = row.querySelector(".criterion-num");
+    if (num) num.textContent = `#${index + 1}`;
+    if (tag) {
+      tag.textContent =
+        kind === "mandatory" ? "Mandatory gate" : `Preference · w ${weight}`;
+      tag.dataset.kind = kind;
+    }
+  });
+  const active = rows
+    .map((row) => ({
+      description: row.querySelector("textarea").value.trim(),
+      kind: row.querySelector("select").value,
+    }))
+    .filter((c) => c.description);
+  const mandatoryCount = active.filter((c) => c.kind === "mandatory").length;
+  const prefCount = active.length - mandatoryCount;
+  $("eval-criteria-preview").textContent = active.length
+    ? `Uses ${active.length} active ${active.length === 1 ? "criterion" : "criteria"} (${mandatoryCount} mandatory, ${prefCount} preference): ${active.map((c) => c.description).join(" · ")}`
+    : "Add or select at least 1 active criterion on the left before evaluating.";
 }
 function syncSuggestionChecks() {
   const active = new Set(
@@ -189,12 +228,18 @@ function invalidate(discovery = false) {
   if (discovery) rememberJob(null);
   evaluation = null;
   $("recommendation").hidden = true;
+  $("evaluated-criteria").hidden = true;
+  $("evaluated-criteria").replaceChildren();
+  $("decision-performance").hidden = true;
+  $("decision-performance").replaceChildren();
   $("comparison").replaceChildren();
   if (discovery) {
     suppliers = [];
     discoveryIssues = [];
     coverage = null;
     discoveryJobId = null;
+    clearSuggestions();
+    $("suggest").hidden = true;
     $("coverage").hidden = true;
     $("sources").replaceChildren();
     $("candidates").replaceChildren();
@@ -224,12 +269,17 @@ function addCriterion(
 ) {
   const row = el("div", undefined, "criterion");
   row.dataset.id = c.id;
-  const label = el("label", "Requirement");
+  const head = el("div", undefined, "criterion-head");
+  const label = el("label", undefined, "form-label criterion-label");
+  label.append(el("span", "#", "criterion-num"), el("span", "Criterion"));
   const inputId = `criterion-${++criterionCounter}`;
   label.htmlFor = inputId;
+  const role = el("span", "", "criterion-role");
+  head.append(label, role);
   const description = el("textarea");
   description.id = inputId;
   description.value = c.description;
+  description.placeholder = "Describe a verifiable requirement…";
   description.required = true;
   description.maxLength = 1000;
   description.rows = 2;
@@ -260,6 +310,7 @@ function addCriterion(
   weightField.hidden = c.kind !== "preference";
   kind.addEventListener("change", () => {
     weightField.hidden = kind.value !== "preference";
+    updateCriteriaHint();
     invalidate();
   });
   const remove = el("button", "Remove", "btn btn-link btn-sm remove");
@@ -270,10 +321,16 @@ function addCriterion(
     syncSuggestionChecks();
     invalidate();
   });
-  description.addEventListener("input", () => invalidate());
-  weight.addEventListener("input", () => invalidate());
+  description.addEventListener("input", () => {
+    updateCriteriaHint();
+    invalidate();
+  });
+  weight.addEventListener("input", () => {
+    updateCriteriaHint();
+    invalidate();
+  });
   controls.append(kind, weightField, remove);
-  row.append(label, description, controls);
+  row.append(head, description, controls);
   $("criteria").append(row);
   updateCriteriaHint();
   syncSuggestionChecks();
@@ -520,9 +577,17 @@ function renderEvidence(evidence, parent) {
   parent.append(box);
 }
 function render() {
+  const assessments = new Map(
+    (evaluation?.assessments || []).map((a) => [a.supplier_id, a]),
+  );
+  const displaySuppliers = evaluation
+    ? sortSuppliersByEvaluation(suppliers, assessments)
+    : sortSuppliersByFit(suppliers);
   updateTotals();
   updateViewStates();
-  renderCandidates();
+  updateCriteriaHint();
+  if (!suppliers.length) clearSuggestions();
+  renderCandidates(displaySuppliers, assessments);
   setWorkspaceState(
     evaluation ? "evaluated" : suppliers.length ? "candidates" : "empty",
   );
@@ -532,14 +597,16 @@ function render() {
     `${suppliers.length} candidate supplier${suppliers.length === 1 ? "" : "s"} · ${suppliers.reduce((n, s) => n + s.evidence.length, 0)} source excerpts`;
   $("evaluate").hidden = !suppliers.length;
   $("evaluate").textContent = evaluation
-    ? "Update shortlist"
-    : "Update shortlist";
+    ? "Re-run evaluation →"
+    : "Evaluate suppliers →";
+  $("reevaluate").hidden = !suppliers.length || !discoveryJobId;
   $("sources").replaceChildren();
+  $("evaluated-criteria").replaceChildren();
+  $("evaluated-criteria").hidden = !evaluation;
+  $("decision-performance").replaceChildren();
+  $("decision-performance").hidden = !evaluation;
   $("comparison").replaceChildren();
   $("recommendation").hidden = !evaluation;
-  const assessments = new Map(
-    (evaluation?.assessments || []).map((a) => [a.supplier_id, a]),
-  );
   const criteria = new Map(readRequirements().criteria.map((c) => [c.id, c]));
   if (evaluation) {
     const chosen = evaluation.recommended_supplier_ids
@@ -563,15 +630,22 @@ function render() {
             : "Review failed and unknown criteria below. Clarify missing evidence, or change a requirement and evaluate again.",
       ),
     );
+    renderEvaluatedCriteria([...criteria.values()]);
+    renderDecisionPerformance(evaluation, displaySuppliers, [
+      ...criteria.values(),
+    ]);
     const wrap = el("div", undefined, "table-responsive"),
       table = el("table"),
       head = el("thead"),
       hr = el("tr");
+    const hasPreferences = [...criteria.values()].some(
+      (c) => c.kind === "preference",
+    );
     for (const [text, source] of [
       ["Supplier"],
       ["Price"],
       ["Mandatory status", "rules"],
-      ["Preferences", "rules"],
+      ["Criteria match", "rules"],
       ["Evidence coverage", "rules"],
     ]) {
       const th = el("th", text);
@@ -587,13 +661,22 @@ function render() {
     head.append(hr);
     table.append(head);
     const body = el("tbody");
-    for (const s of suppliers) {
+    for (const s of displaySuppliers) {
       const a = assessments.get(s.supplier_id),
         row = el("tr"),
         name = el("td");
-      const tier = fitTier(s);
+      const tier = a
+        ? a.eligibility === "eligible"
+          ? "strong"
+          : a.eligibility === "needs_verification"
+            ? "unknown"
+            : "poor"
+        : fitTier(s);
       if (tier) row.dataset.fit = tier;
-      name.append(el("strong", s.name));
+      const titleRow = el("div", undefined, "candidate-title");
+      if (s.fit_rank) titleRow.append(el("span", `#${s.fit_rank}`, "rank-pill"));
+      titleRow.append(el("strong", s.name));
+      name.append(titleRow);
       if (chosen.includes(s)) name.append(el("small", "Shortlisted"));
       const fit = fitLine(s);
       if (fit) name.append(fit);
@@ -605,12 +688,26 @@ function render() {
       );
       const status = el("td");
       status.append(a ? badge(a.eligibility) : badge("Not evaluated"));
-      row.append(
-        priceCell,
-        status,
-        el("td", a ? `${Math.round(a.preference_score)} / 100` : "—"),
-        el("td", a ? `${Math.round(a.evidence_coverage * 100)}%` : "—"),
-      );
+      const matchCell = el("td");
+      const coverageCell = el("td");
+      if (a) {
+        const stats = criteriaBreakdown(a);
+        matchCell.append(
+          el("strong", `${stats.passed} / ${stats.total} passed (${stats.passPct}%)`),
+          el(
+            "small",
+            `${stats.passed} pass · ${stats.failed} fail · ${stats.unknown} unknown${hasPreferences ? ` · Pref ${Math.round(a.preference_score)}/100` : ""}`,
+          ),
+        );
+        coverageCell.append(
+          el("strong", `${Math.round(a.evidence_coverage * 100)}%`),
+          el("small", `${stats.known} / ${stats.total} known`),
+        );
+      } else {
+        matchCell.textContent = "—";
+        coverageCell.textContent = "—";
+      }
+      row.append(priceCell, status, matchCell, coverageCell);
       body.append(row);
     }
     table.append(body);
@@ -620,9 +717,24 @@ function render() {
   $("sources").append(
     el("h3", "Evidence & assessment details", "source-title"),
   );
-  for (const s of suppliers) {
-    const panel = accordion(s.name, "supplier"),
+  for (const s of displaySuppliers) {
+    const a = assessments.get(s.supplier_id);
+    const title = s.fit_rank
+      ? `#${s.fit_rank} · ${s.name}${s.fit_score != null ? ` (${Math.round(s.fit_score)}/100)` : ""}`
+      : s.name;
+    const panel = accordion(title, "supplier"),
       details = panel.body;
+    const tier = a
+      ? a.eligibility === "eligible"
+        ? "strong"
+        : a.eligibility === "needs_verification"
+          ? "unknown"
+          : "poor"
+      : fitTier(s);
+    if (tier) panel.root.dataset.fit = tier;
+    details.append(priceLine(s));
+    const fit = fitLine(s);
+    if (fit) details.append(fit);
     if (s.discovered_by?.length) {
       details.append(
         el(
@@ -632,7 +744,6 @@ function render() {
         ),
       );
     }
-    const a = assessments.get(s.supplier_id);
     if (a) {
       for (const c of a.criteria) {
         const block = el("div", undefined, "assessment"),
@@ -733,14 +844,40 @@ function fitTier(supplier) {
   return "poor";
 }
 function fitRank(supplier) {
+  if (supplier.fit_rank != null) return [0, supplier.fit_rank];
   const conf = supplier.fit_confidence ?? 0;
-  if (supplier.fit_result === "pass") return [0, -conf];
-  if (supplier.fit_result === "unknown") return [1, 0];
-  if (!supplier.fit_result) return [2, 0];
-  return [3, conf];
+  if (supplier.fit_score != null) return [1, -supplier.fit_score];
+  if (supplier.fit_result === "pass") return [2, -conf];
+  if (supplier.fit_result === "unknown") return [3, 0];
+  if (!supplier.fit_result) return [4, 0];
+  return [5, conf];
 }
 function sortSuppliersByFit(list) {
   return [...list].sort((a, b) => {
+    const [ra, ca] = fitRank(a),
+      [rb, cb] = fitRank(b);
+    return ra - rb || ca - cb;
+  });
+}
+function eligibilityRank(eligibility) {
+  if (eligibility === "eligible") return 0;
+  if (eligibility === "needs_verification") return 1;
+  if (eligibility === "ineligible") return 2;
+  return 3;
+}
+function sortSuppliersByEvaluation(list, assessments) {
+  return [...list].sort((a, b) => {
+    const aa = assessments.get(a.supplier_id),
+      ab = assessments.get(b.supplier_id);
+    const ea = eligibilityRank(aa?.eligibility),
+      eb = eligibilityRank(ab?.eligibility);
+    if (ea !== eb) return ea - eb;
+    if (aa && ab) {
+      if (ab.preference_score !== aa.preference_score)
+        return ab.preference_score - aa.preference_score;
+      if (ab.evidence_coverage !== aa.evidence_coverage)
+        return ab.evidence_coverage - aa.evidence_coverage;
+    }
     const [ra, ca] = fitRank(a),
       [rb, cb] = fitRank(b);
     return ra - rb || ca - cb;
@@ -759,24 +896,44 @@ function priceLine(supplier) {
   return line;
 }
 function fitLine(supplier) {
-  if (!supplier.fit_result) return null;
+  if (!supplier.fit_result && supplier.fit_score == null && !supplier.fit_rank)
+    return null;
   const line = el("div", undefined, "fit-line");
   line.append(
     sourceTag(
       "decision",
-      "Relevance screen by gemini-decision-1 during discovery. Advisory only: it does not affect eligibility or rank.",
+      "Discovery prompt ranking by gemini-decision-1 using the generated discovery prompt and crawled site evidence.",
     ),
-    el("span", "Relevance"),
-    badge(supplier.fit_result),
-    el("span", `${percent(supplier.fit_confidence ?? 0)} confidence`, "muted"),
   );
-  if ((supplier.fit_confidence ?? 0) < DECISION_THRESHOLD)
-    line.append(el("span", "Low confidence", "muted"));
+  if (supplier.fit_rank)
+    line.append(el("span", `Rank #${supplier.fit_rank}`, "rank-pill compact"));
+  if (supplier.fit_score != null)
+    line.append(
+      el("span", `${Math.round(supplier.fit_score)} / 100 fit`, "fit-score"),
+    );
+  if (supplier.fit_result) line.append(badge(supplier.fit_result));
+  if (supplier.fit_confidence != null) {
+    const conf = el(
+      "span",
+      `${percent(supplier.fit_confidence)} confidence`,
+      "muted",
+    );
+    if (supplier.fit_probabilities) {
+      conf.title = Object.entries(supplier.fit_probabilities)
+        .map(([k, v]) => `Level ${k}: ${percent(v)}`)
+        .join(" · ");
+    }
+    line.append(conf);
+  }
   return line;
 }
 // A pass/fail answer discarded for low confidence (unknown always abstains).
 function ignored(decision) {
   return !decision.counted && decision.choice !== "unknown";
+}
+function formatProbabilities(probabilities) {
+  if (!probabilities) return "";
+  return ` · P(pass ${percent(probabilities.pass ?? 0)}, fail ${percent(probabilities.fail ?? 0)}, unknown ${percent(probabilities.unknown ?? 0)})`;
 }
 function decisionAnswers(decisions, evidence) {
   const box = el("div", undefined, "decision-answers");
@@ -788,14 +945,255 @@ function decisionAnswers(decisions, evidence) {
       `Excerpt ${index + 1} · ${labels[d.choice]} ${percent(d.confidence)}`,
       `decision-chip choice-${d.choice}${ignored(d) ? " not-counted" : ""}`,
     );
-    chip.title = d.counted
+    const statusNote = d.counted
       ? "Counted toward the criterion result."
       : d.choice === "unknown"
         ? "The decision model abstained for this excerpt."
         : `Ignored: below the ${percent(DECISION_THRESHOLD)} confidence threshold.`;
+    chip.title = `${statusNote}${formatProbabilities(d.probabilities)}`;
     box.append(chip);
   }
   return box;
+}
+function criteriaBreakdown(assessment) {
+  const total = assessment.criteria.length;
+  const passed = assessment.criteria.filter((c) => c.result === "pass").length;
+  const failed = assessment.criteria.filter((c) => c.result === "fail").length;
+  const unknown = total - passed - failed;
+  const known = passed + failed;
+  const passPct = total ? Math.round((passed / total) * 100) : 0;
+  return { total, passed, failed, unknown, known, passPct };
+}
+function renderEvaluatedCriteria(criteriaList) {
+  const host = $("evaluated-criteria");
+  if (!criteriaList.length) {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  const header = el("div", undefined, "evaluated-criteria-head");
+  header.append(
+    el("strong", `Evaluated against ${criteriaList.length} criteria`),
+    el(
+      "span",
+      `${criteriaList.filter((c) => c.kind === "mandatory").length} mandatory · ${criteriaList.filter((c) => c.kind === "preference").length} preference`,
+      "subtle",
+    ),
+  );
+  const list = el("ul", undefined, "evaluated-criteria-list");
+  criteriaList.forEach((c, index) => {
+    const item = el("li", undefined, "evaluated-criterion-chip");
+    item.dataset.kind = c.kind;
+    item.append(
+      el("span", `#${index + 1}`, "criterion-num"),
+      el(
+        "span",
+        c.kind === "mandatory" ? "Mandatory" : `Pref w${c.weight}`,
+        "criterion-role",
+      ),
+      el("span", c.description || c.id, "evaluated-criterion-text"),
+    );
+    list.append(item);
+  });
+  host.replaceChildren(header, list);
+}
+function renderDecisionPerformance(result, supplierList, criteriaList) {
+  const host = $("decision-performance");
+  const m = result.decision_metrics;
+  const allDecisions = (result.assessments || []).flatMap((a) =>
+    a.criteria.flatMap((c) => c.decisions || []),
+  );
+  if (!m && !allDecisions.length) {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  const threshold = m?.confidence_threshold ?? DECISION_THRESHOLD;
+  const model = m?.model || "gemini-decision-1";
+  const questions = m?.questions ?? allDecisions.length;
+  const passCount =
+    m?.pass_count ??
+    allDecisions.filter((d) => d.counted && d.choice === "pass").length;
+  const failCount =
+    m?.fail_count ??
+    allDecisions.filter((d) => d.counted && d.choice === "fail").length;
+  const countedTotal = m?.counted ?? passCount + failCount;
+  const abstained =
+    m?.abstained ?? allDecisions.filter((d) => d.choice === "unknown").length;
+  const belowThreshold =
+    m?.below_threshold ?? allDecisions.filter((d) => ignored(d)).length;
+  const countedConfs = allDecisions
+    .filter((d) => d.counted)
+    .map((d) => d.confidence);
+  const avgConfidence = countedConfs.length
+    ? countedConfs.reduce((sum, v) => sum + v, 0) / countedConfs.length
+    : null;
+  const header = el("div", undefined, "decision-perf-head");
+  header.append(
+    el("h2", "Decision model performance"),
+    sourceTag("decision", `Model: ${model} · ${percent(threshold)} threshold`),
+    el(
+      "span",
+      `${model} · ${percent(threshold)} confidence threshold`,
+      "subtle",
+    ),
+  );
+  const grid = el("div", undefined, "decision-perf-grid");
+  const cards = [
+    [
+      "API calls & latency",
+      m
+        ? `${m.calls} call${m.calls === 1 ? "" : "s"} · ${m.elapsed_seconds.toFixed(1)}s`
+        : `${result.assessments.length} evaluated`,
+      m && m.calls
+        ? `${(m.elapsed_seconds / m.calls).toFixed(2)}s avg/call${m.failed_calls ? ` · ${m.failed_calls} failed` : " · all succeeded"}`
+        : "Measured from live evaluation calls",
+    ],
+    [
+      "Questions & decisions",
+      `${questions} question${questions === 1 ? "" : "s"}`,
+      `${countedTotal} counted (${passCount} pass · ${failCount} fail)`,
+    ],
+    [
+      "Calibration & abstentions",
+      avgConfidence !== null ? `${percent(avgConfidence)} avg confidence` : "—",
+      `${abstained} abstained · ${belowThreshold} ignored (<${percent(threshold)})`,
+    ],
+    [
+      "Supplier coverage",
+      `${result.assessments.length} / ${supplierList.length} assessed`,
+      m?.skipped_suppliers
+        ? `${m.skipped_suppliers} skipped (no excerpts)`
+        : m?.failed_calls
+          ? `${m.failed_calls} provider issue${m.failed_calls === 1 ? "" : "s"}`
+          : "Every candidate with excerpts assessed",
+    ],
+  ];
+  for (const [label, value, sub] of cards) {
+    const card = el("div", undefined, "perf-card");
+    card.append(el("span", label), el("strong", value), el("small", sub));
+    grid.append(card);
+  }
+  host.replaceChildren(header, grid);
+  if (m?.discovery_ranking || m?.evaluation_instructions) {
+    const traceBox = el("details", undefined, "perf-trace");
+    traceBox.open = true;
+    traceBox.append(
+      el("summary", "What the decision model did (prompts, rubrics & actions)"),
+    );
+    const steps = el("ol", undefined, "perf-steps");
+    if (m.discovery_ranking) {
+      const dr = m.discovery_ranking;
+      const item = el("li", undefined, "perf-step");
+      item.append(
+        el(
+          "strong",
+          `1. Ranked ${supplierList.length} discovered suppliers against the generated discovery prompt (${dr.calls} score call${dr.calls === 1 ? "" : "s"} · ${dr.elapsed_seconds.toFixed(1)}s · ${dr.status})`,
+        ),
+      );
+      if (dr.prompt) {
+        const promptEl = el("p", undefined, "perf-prompt");
+        promptEl.append(el("span", "Generated discovery prompt: ", "muted"), dr.prompt);
+        item.append(promptEl);
+      }
+      if (dr.rubric?.length) {
+        const rubricEl = el("p", undefined, "perf-rubric");
+        rubricEl.append(
+          el("span", "Scoring rubric (0–3): ", "muted"),
+          dr.rubric.map((desc, idx) => `${idx}: ${desc}`).join(" | "),
+        );
+        item.append(rubricEl);
+      }
+      if (dr.message) item.append(el("p", dr.message, "help"));
+      steps.append(item);
+    }
+    if (m.evaluation_instructions) {
+      const item = el("li", undefined, "perf-step");
+      item.append(
+        el(
+          "strong",
+          `2. Assessed each (criterion, excerpt) pair independently (${m.calls} choice call${m.calls === 1 ? "" : "s"} · ${m.questions} questions · ${m.elapsed_seconds.toFixed(1)}s)`,
+        ),
+        el("p", m.evaluation_instructions, "perf-prompt"),
+      );
+      steps.append(item);
+    }
+    traceBox.append(steps);
+    host.append(traceBox);
+  }
+  const supplierMetricMap = new Map(
+    (m?.suppliers || []).map((item) => [item.supplier_id, item]),
+  );
+  const assessmentMap = new Map(
+    (result.assessments || []).map((a) => [a.supplier_id, a]),
+  );
+  if (supplierList.length && criteriaList.length) {
+    const details = el("details", undefined, "perf-matrix");
+    details.append(
+      el(
+        "summary",
+        "Inspect per-supplier decision matrix, confidence, and latency",
+      ),
+    );
+    const lanes = el("div", undefined, "decision-lanes");
+    for (const s of supplierList) {
+      const sm = supplierMetricMap.get(s.supplier_id);
+      const a = assessmentMap.get(s.supplier_id);
+      const lane = el("div", undefined, "decision-lane");
+      if (sm?.status) lane.dataset.status = sm.status;
+      const head = el("div", undefined, "lane-head");
+      const statusText = sm
+        ? sm.status === "failed"
+          ? `Failed · ${sm.elapsed_seconds.toFixed(1)}s`
+          : sm.status === "skipped"
+            ? "Skipped (no excerpts)"
+            : `${sm.elapsed_seconds.toFixed(2)}s · ${sm.pass_count} pass · ${sm.fail_count} fail · ${sm.unknown_count} unknown${sm.below_threshold_count ? ` · ${sm.below_threshold_count} ignored` : ""}`
+        : a
+          ? `${a.criteria.length} criteria assessed`
+          : "Not assessed";
+      head.append(el("strong", s.name), el("span", statusText, "lane-status"));
+      const matrix = el("div", undefined, "decision-grid");
+      matrix.style.setProperty("--cols", Math.max(1, s.evidence.length));
+      const criterionAssessments = new Map(
+        (a?.criteria || []).map((ca) => [ca.criterion_id, ca]),
+      );
+      for (const c of criteriaList) {
+        const ca = criterionAssessments.get(c.id);
+        const decisionByEv = new Map(
+          (ca?.decisions || []).map((d) => [d.evidence_id, d]),
+        );
+        s.evidence.forEach((ev, ei) => {
+          const d = decisionByEv.get(ev.id);
+          const cell = el(
+            "span",
+            undefined,
+            d
+              ? `decision-cell choice-${d.choice}${ignored(d) ? " not-counted" : ""}`
+              : "decision-cell",
+          );
+          cell.title = d
+            ? `${c.description || c.id} × excerpt ${ei + 1}: ${labels[d.choice]} · ${percent(d.confidence)}${d.counted ? "" : d.choice === "unknown" ? " · abstained" : " · below threshold, ignored"}${formatProbabilities(d.probabilities)}`
+            : `${c.description || c.id} × excerpt ${ei + 1}: ${sm?.status === "failed" ? sm.message || "failed" : "no decision recorded"}`;
+          matrix.append(cell);
+        });
+      }
+      lane.append(head, matrix);
+      lanes.append(lane);
+    }
+    const key = el("div", undefined, "cell-key");
+    for (const [cls, text] of [
+      ["choice-pass", "Pass"],
+      ["choice-fail", "Fail"],
+      ["choice-unknown", "Unknown"],
+      ["choice-pass not-counted", `Below ${percent(threshold)}`],
+    ]) {
+      const item = el("span");
+      item.append(el("span", undefined, `decision-cell ${cls}`), text);
+      key.append(item);
+    }
+    details.append(lanes, key);
+    host.append(details);
+  }
 }
 
 // ── Live run trace: renders real server events. Nothing here is simulated. ──
@@ -1109,11 +1507,16 @@ $("requirements").addEventListener("submit", async (event) => {
     setBusy(false);
   }
 });
-$("evaluate").addEventListener("click", async () => {
+async function runEvaluation() {
   if (busy || !$("requirements").reportValidity()) return;
   if (!$("criteria").children.length) {
     error("Select or add at least one decision criterion for evaluation.");
+    if (currentView() !== "discovery") location.hash = "/discovery";
     $("add").focus();
+    return;
+  }
+  if (!discoveryJobId) {
+    error("Run discovery first so saved supplier evidence is available.");
     return;
   }
   error();
@@ -1125,7 +1528,7 @@ $("evaluate").addEventListener("click", async () => {
     evaluation = await pollResearch(job.job_id);
     suppliers = evaluation.suppliers;
     coverage = evaluation.coverage;
-    discoveryJobId = job.job_id;
+    discoveryJobId = discoveryJobId || job.job_id;
     renderCoverage();
     render();
     step("shortlist");
@@ -1144,7 +1547,10 @@ $("evaluate").addEventListener("click", async () => {
   } finally {
     setBusy(false);
   }
-});
+}
+$("evaluate").addEventListener("click", runEvaluation);
+$("reevaluate").addEventListener("click", runEvaluation);
+$("shortlist-empty-eval").addEventListener("click", runEvaluation);
 $("add").addEventListener("click", () => {
   if ($("criteria").children.length < 12) {
     addCriterion();
@@ -1153,7 +1559,7 @@ $("add").addEventListener("click", () => {
   }
 });
 $("suggest").addEventListener("click", () => {
-  if (!busy) scheduleSuggestions(true);
+  if (!busy && suppliers.length) scheduleSuggestions(true);
 });
 $("select-all-suggestions").addEventListener("click", () => {
   for (const box of $("suggested-criteria").querySelectorAll(
@@ -1175,26 +1581,16 @@ for (const id of [
   "search-languages",
   "refresh-sources",
 ])
-  $(id).addEventListener("input", () => {
-    invalidate(true);
-    if (["product", "quantity", "country"].includes(id)) scheduleSuggestions();
-  });
+  $(id).addEventListener("input", () => invalidate(true));
 function reset(navigate = true) {
   if (busy) return;
   if (navigate) location.hash = "/discovery";
-  clearTimeout(suggestTimer);
-  suggestAbort?.abort();
-  suggestAbort = null;
-  suggestedBriefKey = "";
+  clearSuggestions();
   error();
   $("product").value = "";
   $("quantity").value = "";
   $("country").value = "";
   $("criteria").replaceChildren();
-  $("suggested-criteria").replaceChildren();
-  $("suggested-status").textContent = "";
-  $("suggested-box").hidden = true;
-  $("select-all-suggestions").hidden = true;
   addCriterion();
   invalidate(true);
   notice("Enter your purchase brief and decision criteria to find suppliers.");
@@ -1245,26 +1641,66 @@ function showView(focus = true) {
 }
 function updateViewStates() {
   $("shortlist-empty").hidden = !!evaluation;
+  const hasCandidates = suppliers.length > 0 && !!discoveryJobId;
+  $("shortlist-empty-title").textContent = hasCandidates
+    ? "Criteria changed — re-run evaluation"
+    : "No evaluation yet.";
+  $("shortlist-empty-desc").textContent = hasCandidates
+    ? "Your discovered suppliers are preserved. Re-run evaluation to score them against the active criteria."
+    : "Submit your brief to research suppliers and build your shortlist.";
+  $("shortlist-empty-eval").hidden = !hasCandidates;
   $("shortlist-evidence-link").hidden = !evaluation;
+  $("reevaluate").hidden = !hasCandidates;
   $("evidence-empty").hidden = suppliers.length > 0;
   $("sources").hidden = !suppliers.length && !discoveryIssues.length;
 }
-function renderCandidates() {
+function renderCandidates(list = suppliers, assessments = new Map()) {
   $("candidates").replaceChildren();
-  for (const supplier of suppliers) {
+  for (const supplier of list) {
     const row = el("div", undefined, "candidate-row");
-    const tier = fitTier(supplier);
+    const a = assessments.get(supplier.supplier_id);
+    const tier = a
+      ? a.eligibility === "eligible"
+        ? "strong"
+        : a.eligibility === "needs_verification"
+          ? "unknown"
+          : "poor"
+      : fitTier(supplier);
     if (tier) row.dataset.fit = tier;
     const description = el("div");
+    const titleRow = el("div", undefined, "candidate-title");
+    if (supplier.fit_rank)
+      titleRow.append(el("span", `#${supplier.fit_rank}`, "rank-pill"));
+    titleRow.append(el("h3", supplier.name));
     description.append(
-      el("h3", supplier.name),
+      titleRow,
       el(
         "p",
         `${supplier.evidence.length} source passages · ${supplier.crawl_status || "pending"} · ${supplier.identity_status === "site_identified" ? "identity from site metadata" : "identity needs verification"}`,
       ),
+      priceLine(supplier),
     );
     const fit = fitLine(supplier);
     if (fit) description.append(fit);
+    if (a) {
+      const stats = criteriaBreakdown(a);
+      const evalLine = el("div", undefined, "fit-line");
+      evalLine.append(
+        sourceTag("rules", "Deterministic evaluation against active criteria"),
+        badge(a.eligibility),
+        el(
+          "span",
+          `${stats.passed} / ${stats.total} criteria passed (${stats.passPct}%)`,
+          "fit-score",
+        ),
+        el(
+          "span",
+          `${stats.failed} fail · ${stats.unknown} unknown`,
+          "muted",
+        ),
+      );
+      description.append(evalLine);
+    }
     const link = el("a", "Review evidence", "btn btn-outline-secondary btn-sm");
     link.href = "#/evidence";
     row.append(description, link);
@@ -1386,8 +1822,10 @@ async function pollResearch(id) {
         `${coverage.queries.length} searches · ${coverage.researched} candidates researched`;
     }
     if (job.result?.assessments) {
-      $("loading-message").textContent =
-        `${job.result.assessments.length} suppliers assessed`;
+      const m = job.result.decision_metrics;
+      $("loading-message").textContent = m
+        ? `${job.result.assessments.length}/${job.result.suppliers?.length || job.result.assessments.length} suppliers assessed · ${m.calls} decision calls · ${m.questions} questions · ${m.elapsed_seconds.toFixed(1)}s`
+        : `${job.result.assessments.length} suppliers assessed`;
     }
     if (job.status === "completed") return job.result;
     if (job.status === "queued") {

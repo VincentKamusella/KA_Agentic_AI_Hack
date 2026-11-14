@@ -88,9 +88,33 @@ class QueueTests(TransactionTestCase):
             execute_job(self.store, claim['id'], claim['lease_id'])
         result = self.store.get(evaluation_token)
         self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['request']['stage'], 'evaluate')
         self.assertEqual(result['result']['recommended_supplier_ids'], ['alpha'])
+        # Re-running evaluation against the same discovery job works repeatedly.
+        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient'):
+            second = self.client.post('/api/research/', json.dumps(payload), content_type='application/json')
+            self.assertEqual(second.status_code, 202)
+            claim = self.store.claim()
+            execute_job(self.store, claim['id'], claim['lease_id'])
+        self.assertEqual(self.store.get(second.json()['job_id'])['status'], 'completed')
         payload['suppliers'] = demo_fixture()['response']['suppliers']
         self.assertEqual(self.client.post('/api/research/', json.dumps(payload), content_type='application/json').status_code, 400)
+
+    def test_evaluation_can_rerun_when_discovery_finished_before_eval_failed(self):
+        with patch('backend.integrations.gemini.GeminiClient'), patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()):
+            token = start_job(self.store, self.payload, 'research')
+            ResearchJob.objects.filter(access_token=token).update(
+                status='failed',
+                result={'phase': 'evaluation', 'suppliers': demo_fixture()['response']['suppliers']},
+                error='Evaluation timed out',
+            )
+        payload = self.payload.model_dump(mode='json') | {'discovery_job_id': token}
+        with patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), patch('backend.integrations.gemini.GeminiClient'):
+            response = self.client.post('/api/research/', json.dumps(payload), content_type='application/json')
+            self.assertEqual(response.status_code, 202)
+            claim = self.store.claim()
+            execute_job(self.store, claim['id'], claim['lease_id'])
+        self.assertEqual(self.store.get(response.json()['job_id'])['status'], 'completed')
 
     def test_evaluation_rejects_missing_pending_and_non_discovery_references(self):
         token = start_job(self.store, self.payload, 'discover')

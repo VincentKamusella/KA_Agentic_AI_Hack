@@ -55,7 +55,8 @@ def start_research(request):
         return JsonResponse({"error": "Request is too large."}, status=413)
     try:
         payload = StageRequest.model_validate(json.loads(request.body))
-        job_id = start_job(ResearchStore(), payload)
+        stage = "evaluate" if payload.discovery_job_id else "research"
+        job_id = start_job(ResearchStore(), payload, stage=stage)
         return JsonResponse({"job_id": job_id, "status": "queued"}, status=202)
     except ValidationError as exc:
         return JsonResponse({"error": "Check your purchase details.", "fields": [

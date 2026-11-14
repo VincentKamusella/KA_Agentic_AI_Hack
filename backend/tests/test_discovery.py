@@ -69,6 +69,7 @@ class DiscoveryTests(StoreCase):
         self.assertFalse(result.coverage.exhaustive)
         self.assertEqual(result.coverage.queries[1].duplicate_suppliers, 2)
         self.assertEqual(result.coverage.researched, 2)
+        self.assertIn('precision steel bolts', result.coverage.discovery_prompt)
         self.assertTrue(all(e.excerpt.startswith('Actual source:') for s in result.suppliers for e in s.evidence))
         self.assertTrue(all(e.kind == 'page' for s in result.suppliers for e in s.evidence))
         self.assertFalse(any('external.test' in url for url in crawler.calls))
