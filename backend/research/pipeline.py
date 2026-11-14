@@ -1,4 +1,4 @@
-"""Shared three-stage workflow and deterministic shortlist."""
+"""Shared workflow and deterministic shortlist, with optional final recommendations."""
 from backend.domain.contracts import RecommendRequest, RecommendResponse
 
 
@@ -12,10 +12,15 @@ def shortlist(suppliers, evaluation, issues=()):
 
 
 class Recommender:
-    def __init__(self, discovery, evaluator):
+    def __init__(self, discovery, evaluator, recommendation_agent=None):
         self.discovery, self.evaluator = discovery, evaluator
+        self.recommendation_agent = recommendation_agent
 
     async def recommend(self, request: RecommendRequest):
         discovery = await self.discovery.discover_suppliers(request.requirements, options=request.options)
         evaluation = await self.evaluator.evaluate_suppliers(request.requirements, discovery.suppliers)
-        return shortlist(discovery.suppliers, evaluation, discovery.issues)
+        result = shortlist(discovery.suppliers, evaluation, discovery.issues)
+        if self.recommendation_agent is not None:
+            from backend.research.recommendations import add_recommendations
+            await add_recommendations(request.requirements, result, self.recommendation_agent)
+        return result

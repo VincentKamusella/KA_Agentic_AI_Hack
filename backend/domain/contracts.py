@@ -1,7 +1,7 @@
 """Shared wire models for discovery, evaluation, and the Django product layer."""
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StrictFloat, StrictInt, model_validator
 
@@ -163,7 +163,7 @@ class SupplierAssessment(Contract):
 
 
 class PipelineIssue(Contract):
-    stage: Literal["discovery", "evaluation"]
+    stage: Literal["discovery", "evaluation", "recommendation"]
     supplier_id: str | None = None
     url: HttpUrl | None = None
     code: str = Field(min_length=1)
@@ -233,12 +233,50 @@ class RecommendRequest(Contract):
     options: DiscoveryOptions = Field(default_factory=DiscoveryOptions)
 
 
+RecommendationText = Annotated[str, Field(min_length=1, max_length=2000, pattern=r"\S")]
+
+
+class RecommendationReason(Contract):
+    text: RecommendationText
+    evidence_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class VerificationQuestion(Contract):
+    criterion_id: str = Field(min_length=1)
+    question: RecommendationText
+
+
+class EmailDraft(Contract):
+    """Plain-text draft only. Recipient and sender addresses are never inferred."""
+
+    subject: str = Field(min_length=1, max_length=200, pattern=r"^[^\r\n]+$")
+    body: str = Field(min_length=1, max_length=60000)
+
+
+class SupplierRecommendation(Contract):
+    supplier_id: str
+    qualification: Literal["meets_documented_requirements", "outreach_only"]
+    reasons: list[RecommendationReason] = Field(min_length=1, max_length=5)
+    tradeoffs: list[RecommendationText] = Field(max_length=8)
+    verification_questions: list[VerificationQuestion] = Field(max_length=12)
+    email_draft: EmailDraft
+
+
+class RecommendationReport(Contract):
+    summary: RecommendationText
+    no_eligible_suppliers: bool
+    candidate_supplier_ids: list[str] = Field(max_length=12)
+    # Ordered by the agent's suggested contact priority, separate from the shortlist.
+    recommendations: list[SupplierRecommendation] = Field(max_length=3)
+
+
 class RecommendResponse(Contract):
     suppliers: list[SupplierEvidence]
     assessments: list[SupplierAssessment]
     recommended_supplier_ids: list[str] = Field(max_length=3)
     issues: list[PipelineIssue] = Field(default_factory=list)
     decision_metrics: DecisionMetrics | None = None
+    recommendation_report: RecommendationReport | None = None
 
 
 class SuggestCriteriaRequest(Contract):

@@ -45,7 +45,7 @@ Below 720px the sidebar becomes a row with the hamburger and brand whose menu op
 
 ## Live runs and provenance
 
-While a job runs, the progress panel lists the research steps with their real status, taken from the job's phase; nothing is simulated, and blue appears only on the step that is running. The decision-model panel fills in as evaluation checkpoints arrive: calls, latency, counted and ignored answers, the prompts and rubric that were used, and one requirement × excerpt matrix per supplier.
+While a job runs, a loading panel shows one current activity, elapsed time, and an optional link to sources over a blurred stack of real candidate previews. Before candidates arrive, abstract skeleton cards occupy the stack. Preview content is inert and hidden from assistive technology; a clear discovered count carries the information. Cards continuously shuffle through three staggered positions, preserving animation phase across polling updates; reduced-motion users see a static stack. The loading panel has no supplier-preview button. Search and website retrieval have distinct messages. The technical step checklist and detailed result sections stay hidden until the run ends; source evidence remains accessible. Nothing is simulated. The decision-model panel fills in as evaluation checkpoints arrive: calls, latency, counted and ignored answers, the prompts and rubric that were used, and one requirement × excerpt matrix per supplier.
 
 Every model-derived value carries a `sourceTag()`: the solid, inverted **Decision model** chip is reserved for `gemini-decision-1` output; **Search model**, **Code**, and **Rules** stay outlined. Show decision confidence next to decision results, and mark answers ignored under the threshold with dashed, struck-through chips. Suppliers show their discovery fit rank and listed price where the backend provides them, and Sources is ordered by fit. "Suggest requirements" in the requirements editor offers model suggestions that the user adds one by one; none is included automatically.
 
@@ -58,3 +58,17 @@ The submitted form is kept, locked, while a job runs, and kept on every error. V
 "Needs verification" is never presented as a pass. When no supplier is confirmed, the summary still lists the suppliers that need confirmation and which requirements are open. Copy never implies that order capacity or delivery dates are guaranteed, that orders are placed, or that messages are sent. A supplier whose evaluation failed is "Not evaluated", never failed. Source passages are labelled by kind (source passage, PDF source passage, search summary).
 
 Copy states only what the code does.
+
+Supplier recommendations use a deck: one complete card is visible at a time, with layered edges, a position count, and Previous/Next buttons. A View full list / Back to card stack toggle switches layouts without losing the selected card. Contact priority order is preserved; evidence and email drafts stay inside each card.
+
+The results page prioritizes reviewing supplier cards and opening quotation drafts in an email app. Detailed comparisons, requirements, grading metrics and research notes live in a collapsed Research details section. Each card keeps its qualification and leading reason visible, with evidence and questions on demand. Email drafts can be opened via mailto or copied; recipients are entered in the email app, and the app itself does not send messages.
+
+The results view omits the purchase-summary bar. Edit brief and View sources links remain inside Research details.
+
+Recommendation cards show evidence by default in two groups: Why consider this supplier and What to check before ordering. These are side by side on desktop and stacked on mobile; citations are secondary, and the email action follows below. The section introduction contains only a heading and one short qualification message when needed.
+
+Research details is no longer exposed on the results page. Supplier recommendation cards are the results interface; legacy grading/editor DOM remains hidden and inert for compatibility.
+
+Supplier cards expose only Open in email app for outreach. Inline draft previews and their copy control have been removed; the full subject and message are passed to the email app.
+
+The deck uses Previous/Next only; the full-list option is removed. Directional 440ms card transitions reverse for Previous, with instant switching for reduced motion.

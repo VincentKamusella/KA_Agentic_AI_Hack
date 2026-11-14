@@ -6,6 +6,7 @@ criterion attainment (0 or 100), not model probabilities or commercial guarantee
 """
 import asyncio
 import json
+import logging
 import time
 from typing import Literal
 
@@ -17,6 +18,7 @@ from backend.domain.contracts import (Contract, CriterionAssessment, DecisionMet
 from backend.integrations.gemini import GeminiError
 
 CONFIDENCE_THRESHOLD = 0.85  # Provisional hackathon threshold; not calibrated on customers.
+logger = logging.getLogger(__name__)
 DECISION_MODEL = "gemini-decision-1"
 # Discovery's derived fields must not anchor criterion-level decisions.
 SCREEN_FIELDS = {"fit_rank", "fit_score", "fit_result", "fit_confidence", "fit_probabilities", "price"}
@@ -49,6 +51,7 @@ class ScoreAnswer(Contract):
     score: float = Field(ge=0, le=3)
     confidence: float = Field(ge=0, le=1)
     probabilities: dict[str, float] = Field(default_factory=dict)
+    legend: dict[str, str] = Field(default_factory=dict)
 
 
 def counted(answer):
@@ -128,7 +131,7 @@ class GeminiEvaluator:
             try:
                 return await self.client.post("decisions", payload)
             except GeminiError as exc:
-                if getattr(exc, "status_code", None) not in (429, 503) or attempt == 1:
+                if not exc.retryable or attempt == 1:
                     raise
                 delay = getattr(exc, "retry_after", None)
                 await asyncio.sleep(min(10.0, max(0.25, float(delay) if delay is not None else 1.5)))
@@ -214,6 +217,7 @@ class GeminiEvaluator:
         if not questions:
             report("skipped", message="No source excerpts to assess.")
         if questions:
+            validation_stage = 'request'
             try:
                 report("queued")
                 async with self._semaphore:
@@ -229,12 +233,14 @@ class GeminiEvaluator:
                         })
                     finally:
                         call_elapsed = round(time.monotonic() - call_started, 2)
+                validation_stage = 'answer_set'
                 raw = response.get("answers")
                 if not isinstance(raw, dict) or set(raw) != set(questions):
                     raise ValueError("Incomplete decision answers")
                 if "discovery_fit" in raw:
+                    validation_stage = 'discovery_score'
                     score_answer = ScoreAnswer.model_validate(raw["discovery_fit"])
-                    apply_discovery_score(supplier, score_answer)
+                validation_stage = 'criterion_answers'
                 answers = {
                     key: DecisionAnswer.model_validate(value)
                     for key, value in raw.items()
@@ -251,7 +257,14 @@ class GeminiEvaluator:
                         raise ValueError("Inconsistent confidence")
                     if a.probabilities[a.choice] < max(a.probabilities.values()):
                         raise ValueError("Inconsistent choice")
+                if "discovery_fit" in raw:
+                    apply_discovery_score(supplier, score_answer)
             except (GeminiError, ValidationError, ValueError) as exc:
+                if not isinstance(exc, GeminiError):
+                    logger.warning('Decision validation failed stage=%s error_type=%s schema_errors=%s',
+                                   validation_stage, type(exc).__name__,
+                                   sorted({e['type'] for e in exc.errors(include_input=False)})
+                                   if isinstance(exc, ValidationError) else [])
                 issue = PipelineIssue(stage="evaluation", supplier_id=supplier.supplier_id,
                                       code="evaluation_unavailable", message=str(exc) if isinstance(exc, GeminiError)
                                       else "Gemini returned invalid or incomplete decisions; supplier was not ranked.", retryable=True)

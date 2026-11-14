@@ -73,7 +73,7 @@
     <div class="page-head">
       <div>
         <h1 id="brief-title">New supplier search</h1>
-        <p>Describe the purchase in your own words. QuotePilot turns it into requirements, searches for suppliers, and checks the evidence it finds against each requirement.</p>
+        <p>Tell us what you need and where it should arrive.</p>
       </div>
       <div class="head-actions">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
@@ -93,11 +93,11 @@
         <div id="form-error" class="note note-error" role="alert" tabindex="-1" hidden></div>
 
         <section class="form-block" aria-labelledby="purchase-title">
-          <h2 id="purchase-title">Purchase</h2>
+          <h2 id="purchase-title" class="visually-hidden">Purchase details</h2>
           <div class="field">
             <label class="form-label" for="product">What do you need?</label>
-            <textarea class="form-control" id="product" required maxlength="1000" rows="3" placeholder="For example: food-grade aluminium containers, 750 ml" aria-describedby="product-help product-error"></textarea>
-            <p class="help" id="product-help">Name the product and its essential specifications, such as material, size, standard or grade.</p>
+            <textarea class="form-control" id="product" required maxlength="1000" rows="3" placeholder="e.g. Food-grade aluminium containers, 750 ml" aria-describedby="product-help product-error"></textarea>
+            <p class="help" id="product-help">Include the size, material or grade.</p>
             <p class="field-error" id="product-error" hidden></p>
           </div>
           <div class="field-row">
@@ -113,24 +113,23 @@
                   <option value="litres">litres</option>
                   <option value="custom">Other unit…</option>
                 </select>
-              </div>
               <div id="unit-custom-field" hidden>
                 <label class="visually-hidden" for="unit-custom">Custom unit</label>
-                <input class="form-control" id="unit-custom" maxlength="40" placeholder="Unit, for example pallets" aria-describedby="quantity-error">
+                <input class="form-control" id="unit-custom" maxlength="40" placeholder="e.g. pallets" aria-describedby="quantity-error">
+                <button type="button" id="unit-reset" class="btn btn-outline-secondary" aria-label="Choose a standard unit" title="Choose a standard unit"><svg class="icon" aria-hidden="true"><use href="#i-cross"/></svg></button>
+              </div>
               </div>
               <p class="field-error" id="quantity-error" hidden></p>
             </div>
             <div class="field">
-              <span class="form-label" id="area-label">Delivery destination</span>
-              <button type="button" id="area-open" class="form-control area-button" aria-labelledby="area-label area-text" aria-describedby="area-note area-error"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="area-text">Select on the map</span></button>
+              <span class="form-label" id="area-label">Deliver to</span>
+              <button type="button" id="area-open" class="btn btn-outline-secondary area-button" aria-haspopup="dialog" aria-controls="area-modal" aria-labelledby="area-label area-text" aria-describedby="area-error"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="area-text">Choose on map…</span></button>
               <p class="field-error" id="area-error" hidden></p>
             </div>
           </div>
-          <p class="help" id="area-note">The destination is where the goods are shipped to, not where they are made.</p>
           <div class="field field-date">
             <label class="form-label" for="needed-by">Needed by <span class="optional">Optional</span></label>
-            <input class="form-control" id="needed-by" type="date" aria-describedby="needed-by-help needed-by-error">
-            <p class="help" id="needed-by-help">Leave empty if the date is flexible.</p>
+            <input class="form-control" id="needed-by" type="date" aria-describedby="needed-by-error">
             <p class="field-error" id="needed-by-error" hidden></p>
           </div>
         </section>
@@ -138,15 +137,14 @@
         <section class="form-block" aria-labelledby="other-title">
           <h2 id="other-title"><label for="other">Other requirements</label> <span class="optional">Optional</span></h2>
           <textarea class="form-control" id="other" maxlength="4000" rows="4" placeholder="EU manufacturing required; recyclable packaging preferred." aria-describedby="other-help other-error"></textarea>
-          <p class="help" id="other-help">Say which points are required and which are only preferred. Required points become must-haves that a supplier has to meet; preferred points are used to rank the suppliers that do. You can review and adjust this reading once the search has started.</p>
+          <p class="help" id="other-help">Separate essentials from preferences.</p>
           <p class="field-error" id="other-error" hidden></p>
         </section>
 
         <div id="brief-note" class="note" hidden></div>
 
         <div class="action-bar">
-          <button id="submit" type="submit" class="btn btn-primary btn-icon" data-busy-lock>Find my shortlist<svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
-          <p class="help">Research runs on the server and is saved there; this browser remembers your latest search. Public search cannot guarantee every supplier. No orders are placed and no messages are sent to suppliers.</p>
+          <button id="submit" type="submit" class="btn btn-primary btn-icon" data-busy-lock>Find suppliers<svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
         </div>
       </fieldset>
     </form>
@@ -156,13 +154,13 @@
   <section id="view-results" data-view="results" aria-labelledby="results-title" hidden>
     <div class="page-head">
       <div>
-        <h1 id="results-title">Shortlist</h1>
-        <p>Must-haves decide who is eligible. Nice-to-haves rank the eligible suppliers. Every result links to the evidence behind it.</p>
+        <h1 id="results-title">Suppliers</h1>
       </div>
       <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
     </div>
-    <div class="brief-summary" data-brief-summary hidden></div>
     <div id="results-state"></div>
+    <section id="contact-recommendations" class="content-block contact-recommendations" aria-labelledby="contact-title" hidden></section>
+    <div id="research-details" hidden inert>
     <div id="recommendation" class="recommendation" hidden></div>
 
     <section id="requirements-block" class="content-block" aria-labelledby="requirements-title" hidden>
@@ -210,6 +208,7 @@
       <div id="results-notes"></div>
     </section>
     <section id="coverage" class="content-block" aria-labelledby="coverage-title" hidden></section>
+    </div>
   </section>
 
   <!-- Sources -->

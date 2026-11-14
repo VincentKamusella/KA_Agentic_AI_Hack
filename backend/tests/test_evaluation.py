@@ -199,6 +199,7 @@ class EvaluationTests(unittest.TestCase):
                         answers[key] = {
                             'type': 'score',
                             'score': 2.7,
+                            'legend': {'0': 'Irrelevant', '1': 'Weak', '2': 'Relevant', '3': 'Strong'},
                             'confidence': .9,
                             'probabilities': {'0': .02, '1': .03, '2': .2, '3': .75},
                         }
@@ -232,6 +233,23 @@ class EvaluationTests(unittest.TestCase):
             self.requirements, [self.supplier], progress=events.append))
         self.assertEqual(events[3]['status'], 'failed')
         self.assertEqual(events[3]['message'], 'Unavailable')
+
+    def test_invalid_criteria_do_not_publish_a_partial_discovery_score(self):
+        class InvalidCriteria(FakeClient):
+            async def post(self, endpoint, payload):
+                result = await super().post(endpoint, payload)
+                result['answers']['discovery_fit'] = {
+                    'type': 'score', 'score': 3, 'confidence': .99,
+                    'legend': {'3': 'Strong'}, 'probabilities': {'3': 1},
+                }
+                result['answers']['c0_e0']['probabilities']['fail'] = .99
+                return result
+        with self.assertLogs('backend.evaluation.service', level='WARNING') as logs:
+            result = asyncio.run(GeminiEvaluator(InvalidCriteria()).evaluate_suppliers(
+                self.requirements, [self.supplier], discovery_prompt='Steel bolts'))
+        self.assertEqual(result.assessments, [])
+        self.assertIsNone(self.supplier.fit_score)
+        self.assertIn('stage=criterion_answers', logs.output[0])
 
     def test_rank_by_discovery_uses_generated_prompt_and_assigns_fit_rank(self):
         import json

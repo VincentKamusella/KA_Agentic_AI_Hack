@@ -15,7 +15,7 @@ def discovery_suppliers(store, token):
     result = (job or {}).get('result') or {}
     discovery_ready = job and (
         job['status'] == 'completed'
-        or (job['status'] in ('failed', 'interrupted') and result.get('phase') in ('evaluation', 'complete'))
+        or (job['status'] in ('failed', 'interrupted') and result.get('phase') in ('evaluation', 'recommendation', 'complete'))
     )
     if not discovery_ready or job['request'].get('stage') not in ('discover', 'research'):
         raise ValueError('A completed discovery job is required.')
@@ -49,6 +49,7 @@ def execute_job(store, job_id, lease_id):
     )
     from backend.integrations.gemini import GeminiClient, GeminiError
     from backend.research.pipeline import shortlist
+    from backend.research.recommendations import GeminiRecommendationAgent, add_recommendations
 
     interpreted = None
 
@@ -132,7 +133,12 @@ def execute_job(store, job_id, lease_id):
         if discovery_prompt is not None:
             suppliers = assign_fit_ranks(suppliers)
             discovery.suppliers = suppliers
-        return {**combined(), 'phase': 'complete'}
+        await checkpoint(combined(), 'recommendation')
+        final = await add_recommendations(
+            payload.requirements, shortlist(suppliers, evaluation, discovery.issues),
+            GeminiRecommendationAgent(client),
+        )
+        return {**combined(), **final.model_dump(mode='json'), 'phase': 'complete'}
 
     try:
         request = store.claimed_request(job_id, lease_id)

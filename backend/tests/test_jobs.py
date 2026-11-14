@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from backend.integrations.gemini import GeminiError
 from backend.tests.base import StoreCase
@@ -14,7 +14,12 @@ class JobTests(StoreCase):
         }})
         with patch('backend.integrations.gemini.GeminiClient'), \
              patch('backend.discovery.service.GeminiDiscovery', return_value=DemoDiscovery()), \
-             patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()):
+             patch('backend.evaluation.service.GeminiEvaluator', return_value=DemoEvaluator()), \
+             patch('backend.research.recommendations.GeminiRecommendationAgent') as agent:
+            from backend.domain.contracts import RecommendationReport
+            agent.return_value.recommend = AsyncMock(return_value=RecommendationReport(
+                summary='No supplier meets all mandatory requirements yet.', no_eligible_suppliers=True,
+                candidate_supplier_ids=[], recommendations=[]))
             job = start_job(self.store, payload)
             claim = self.store.claim()
             execute_job(self.store, claim['id'], claim['lease_id'])
@@ -24,6 +29,8 @@ class JobTests(StoreCase):
         interpreted = state['result']['requirements']
         self.assertEqual([c['id'] for c in interpreted['criteria']], ['product', 'quantity', 'destination'])
         self.assertEqual(len(state['result']['assessments']), 3)
+        self.assertTrue(state['result']['recommendation_report']['no_eligible_suppliers'])
+        agent.return_value.recommend.assert_awaited_once()
         revised = StageRequest.model_validate({'requirements': interpreted, 'discovery_job_id': job})
         self.assertTrue(start_job(self.store, revised))
         for field, value in [('quantity_unit', 'pieces'), ('needed_by', '2027-03-15'),
