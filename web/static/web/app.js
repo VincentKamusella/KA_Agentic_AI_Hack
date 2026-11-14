@@ -1081,7 +1081,7 @@ function renderContactRecommendations() {
       h(
         "div",
         { class: "contact-heading" },
-        h("h3", { text: `${index + 1}. ${supplier.name}` }),
+        h("h3", { text: supplier.name }),
         h("p", {
           class: "contact-status",
           text: qualified

@@ -825,8 +825,8 @@ test("saved recommendations show contact priority, qualification, citations and 
   const d = dom.window.document;
   await settle(() => d.querySelectorAll(".contact-item").length === 2);
   const section = d.getElementById("contact-recommendations");
-  assert.match(section.textContent, /1\. Example Alpha/);
-  assert.match(section.textContent, /2\. Example Gamma/);
+  assert.equal(section.querySelectorAll("h3")[0].textContent, "Example Alpha");
+  assert.equal(section.querySelectorAll("h3")[1].textContent, "Example Gamma");
   assert.match(section.textContent, /Meets documented requirements/);
   assert.match(section.textContent, /Requirements not yet verified/);
   assert.match(section.textContent, /1 open question for the supplier/);
