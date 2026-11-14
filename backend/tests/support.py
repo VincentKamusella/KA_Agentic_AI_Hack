@@ -9,14 +9,14 @@ def demo_fixture():
 
 
 class DemoDiscovery:
-    async def discover_suppliers(self, requirements, *, options):
+    async def discover_suppliers(self, requirements, *, options, progress=None):
         fixture = demo_fixture()
         return DiscoveryResult.model_validate({"suppliers": fixture["response"]["suppliers"][:options.max_suppliers]})
 
 
 class DemoEvaluator:
     """Saved synthetic assessments; changed descriptions deliberately abstain."""
-    async def evaluate_suppliers(self, requirements, suppliers):
+    async def evaluate_suppliers(self, requirements, suppliers, *, progress=None):
         fixture = demo_fixture()
         reference = {c["id"]: c["description"] for c in fixture["request"]["requirements"]["criteria"]}
         saved = {a["supplier_id"]: a for a in fixture["response"]["assessments"]}

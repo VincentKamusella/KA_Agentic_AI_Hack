@@ -106,13 +106,8 @@ function setWorkspaceState(name) {
   $("view-shortlist-action").hidden = name !== "evaluated";
   $("workspace-state").dataset.state = name;
 }
-let loadingTimer;
 function setBusy(value, message = "") {
   busy = value;
-  clearInterval(loadingTimer);
-  $("loading").hidden = !value;
-  $("loading-message").textContent = "Request in progress";
-  $("loading-time").textContent = "";
   $("discover").textContent =
     value && !suppliers.length ? "Searching…" : "Find my shortlist →";
   $("evaluate").textContent =
@@ -126,11 +121,6 @@ function setBusy(value, message = "") {
       block: "nearest",
       behavior: "instant",
     });
-    const started = Date.now();
-    loadingTimer = setInterval(() => {
-      $("loading-time").textContent =
-        `${Math.floor((Date.now() - started) / 1000)}s elapsed`;
-    }, 1000);
   }
 
   document
@@ -266,6 +256,7 @@ async function post() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/x-ndjson, application/json",
         "X-CSRFToken": csrf || "",
       },
       body: JSON.stringify({
@@ -275,14 +266,54 @@ async function post() {
       }),
       signal: controller.signal,
     });
-    const data = await response.json().catch(() => ({
-      error: "The server returned an unreadable response. Retry the request.",
-    }));
-    if (!response.ok)
-      throw new Error(data.error || "Request failed. Please retry.");
-    return data;
+    if (
+      !response.ok ||
+      !response.headers.get("Content-Type")?.includes("ndjson")
+    ) {
+      const data = await response.json().catch(() => ({
+        error: "The server returned an unreadable response. Retry the request.",
+      }));
+      if (!response.ok)
+        throw new Error(data.error || "Request failed. Please retry.");
+      return data;
+    }
+    return await readStream(response, onEvent);
   } finally {
     clearTimeout(timer);
+  }
+}
+// Reads NDJSON progress events until the terminal result or error line.
+async function readStream(response, onEvent) {
+  const reader = response.body.getReader(),
+    decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let newline;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        throw new Error("The server sent an unreadable update. Please retry.");
+      }
+      if (event.type === "result") return event.data;
+      if (event.type === "error")
+        throw new Error(event.error || "Request failed. Please retry.");
+      try {
+        onEvent(event);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (done)
+      throw new Error(
+        "The connection closed before the stage finished. Please retry.",
+      );
   }
 }
 let disclosureCounter = 0;
@@ -315,13 +346,15 @@ function renderEvidence(evidence, parent) {
   a.href = evidence.source_url;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  box.append(
-    a,
+  const meta = el("div", undefined, "evidence-meta");
+  meta.append(
+    sourceTag("search"),
     el(
       "small",
       `${evidence.kind === "search_summary" ? "Legacy search summary" : evidence.kind === "pdf" ? "PDF source passage" : "Source passage"} · retrieved ${new Date(evidence.fetched_at).toLocaleString()}`,
     ),
   );
+  box.append(a, meta);
   parent.append(box);
 }
 function render() {
@@ -372,13 +405,22 @@ function render() {
       table = el("table"),
       head = el("thead"),
       hr = el("tr");
-    for (const text of [
-      "Supplier",
-      "Mandatory status",
-      "Preferences",
-      "Evidence coverage",
-    ])
-      hr.append(el("th", text));
+    for (const [text, source] of [
+      ["Supplier"],
+      ["Mandatory status", "rules"],
+      ["Preferences", "rules"],
+      ["Evidence coverage", "rules"],
+    ]) {
+      const th = el("th", text);
+      if (source)
+        th.append(
+          sourceTag(
+            source,
+            "Computed by deterministic rules from decision-model answers",
+          ),
+        );
+      hr.append(th);
+    }
     head.append(hr);
     table.append(head);
     const body = el("tbody");
@@ -388,6 +430,8 @@ function render() {
         name = el("td");
       name.append(el("strong", s.name));
       if (chosen.includes(s)) name.append(el("small", "Shortlisted"));
+      const fit = fitLine(s);
+      if (fit) name.append(fit);
       row.append(name);
       const status = el("td");
       status.append(a ? badge(a.eligibility) : badge("Not evaluated"));
@@ -428,8 +472,14 @@ function render() {
             "span",
             criteria.get(c.criterion_id)?.description || c.criterion_id,
           ),
+          sourceTag(
+            "decision",
+            "Criterion result combined by rules from per-excerpt gemini-decision-1 answers",
+          ),
         );
         block.append(heading, el("p", c.explanation));
+        if (c.decisions?.length)
+          block.append(decisionAnswers(c.decisions, s.evidence));
         for (const id of c.evidence_ids) {
           const evidence = s.evidence.find((e) => e.id === id);
           if (evidence) renderEvidence(evidence, block);
@@ -466,6 +516,349 @@ function render() {
   for (const issue of [...discoveryIssues, ...(evaluation?.issues || [])])
     $("sources").append(el("p", issue.message, "alert alert-warning issue"));
 }
+// ── Provenance: every model-derived value is tagged with where it came from. ──
+const DECISION_THRESHOLD = 0.85;
+const SOURCES = {
+  decision: {
+    label: "Decision model",
+    title: "Produced by the Gemini Decisions model (gemini-decision-1)",
+    icon: '<path d="M8 1.5 14.5 8 8 14.5 1.5 8z"/><path d="M8 5v6M5 8h6"/>',
+  },
+  search: {
+    label: "Search model",
+    title: "Cited summary written by the Gemini search model",
+    icon: '<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 4 4"/>',
+  },
+  code: {
+    label: "Code",
+    title: "Deterministic code; no model involved",
+    icon: '<path d="m5.5 4-4 4 4 4M10.5 4l4 4-4 4"/>',
+  },
+  rules: {
+    label: "Rules",
+    title: "Deterministic gates and ranking applied to decision-model answers",
+    icon: '<path d="M2 4h12M2 8h12M2 12h7"/>',
+  },
+};
+function sourceTag(kind, title) {
+  const source = SOURCES[kind],
+    tag = el("span", undefined, `src-tag src-${kind}`);
+  tag.title = title || source.title;
+  // Static, trusted SVG markup only.
+  tag.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${source.icon}</svg>`;
+  tag.append(el("span", source.label));
+  return tag;
+}
+function percent(value) {
+  return `${Math.round(value * 100)}%`;
+}
+function fitLine(supplier) {
+  if (!supplier.fit_result) return null;
+  const line = el("div", undefined, "fit-line");
+  line.append(
+    sourceTag(
+      "decision",
+      "Relevance screen by gemini-decision-1 during discovery. Advisory only: it does not affect eligibility or rank.",
+    ),
+    el("span", "Relevance"),
+    badge(supplier.fit_result),
+    el("span", `${percent(supplier.fit_confidence ?? 0)} confidence`, "muted"),
+  );
+  if ((supplier.fit_confidence ?? 0) < DECISION_THRESHOLD)
+    line.append(el("span", "Low confidence", "muted"));
+  return line;
+}
+// A pass/fail answer discarded for low confidence (unknown always abstains).
+function ignored(decision) {
+  return !decision.counted && decision.choice !== "unknown";
+}
+function decisionAnswers(decisions, evidence) {
+  const box = el("div", undefined, "decision-answers");
+  box.append(el("span", "Per-excerpt answers", "muted"));
+  for (const d of decisions) {
+    const index = evidence.findIndex((e) => e.id === d.evidence_id);
+    const chip = el(
+      "span",
+      `Excerpt ${index + 1} · ${labels[d.choice]} ${percent(d.confidence)}`,
+      `decision-chip choice-${d.choice}${ignored(d) ? " not-counted" : ""}`,
+    );
+    chip.title = d.counted
+      ? "Counted toward the criterion result."
+      : d.choice === "unknown"
+        ? "The decision model abstained for this excerpt."
+        : `Ignored: below the ${percent(DECISION_THRESHOLD)} confidence threshold.`;
+    box.append(chip);
+  }
+  return box;
+}
+
+// ── Live run trace: renders real server events. Nothing here is simulated. ──
+const STEP_PLANS = {
+  discover: [
+    ["search", "Search public sources", "search"],
+    ["sources", "Resolve citations and group excerpts by supplier", "code"],
+    ["fit", "Relevance screen for each candidate", "decision"],
+  ],
+  evaluate: [
+    ["assess", "Assess every criterion against every excerpt", "decision"],
+    ["rank", "Apply mandatory gates and rank", "rules"],
+  ],
+};
+const STATUS_TEXT = {
+  pending: "Waiting",
+  running: "Running",
+  done: "Done",
+  failed: "Failed",
+  skipped: "Skipped",
+};
+let trace = null;
+function startTrace(stage) {
+  clearInterval(trace?.timer);
+  const steps = new Map(),
+    list = $("run-steps");
+  list.replaceChildren();
+  for (const [id, label, source] of STEP_PLANS[stage]) {
+    const node = el("li", undefined, `run-step src-step-${source}`);
+    node.dataset.status = "pending";
+    const marker = el("span", undefined, "run-marker"),
+      body = el("div", undefined, "run-body"),
+      head = el("div", undefined, "run-step-head"),
+      state = el("span", STATUS_TEXT.pending, "run-state"),
+      time = el("span", "", "run-time"),
+      detail = el("p", "", "run-detail"),
+      extra = el("div", undefined, "run-extra");
+    marker.setAttribute("aria-hidden", "true");
+    head.append(el("strong", label), sourceTag(source), state, time);
+    body.append(head, detail, extra);
+    node.append(marker, body);
+    list.append(node);
+    steps.set(id, { node, state, time, detail, extra, start: null, end: null });
+  }
+  const criteria = readRequirements().criteria;
+  trace = {
+    stage,
+    steps,
+    criteria,
+    lanes: new Map(),
+    calls: 0,
+    answers: 0,
+    started: performance.now(),
+    timer: setInterval(tickTrace, 250),
+  };
+  $("run-trace").dataset.state = "running";
+  $("run-trace-title").textContent =
+    stage === "discover" ? "Live run · Discovery" : "Live run · Evaluation";
+  $("run-trace-summary").textContent = "";
+  $("run-trace").hidden = false;
+  if (stage === "evaluate") buildLanes();
+  tickTrace();
+}
+function traceSeconds() {
+  return (performance.now() - trace.started) / 1000;
+}
+function tickTrace() {
+  if (!trace) return;
+  const now = traceSeconds();
+  if ($("run-trace").dataset.state === "running")
+    $("run-trace-time").textContent = `${Math.floor(now)}s elapsed`;
+  for (const step of trace.steps.values()) {
+    if (step.start === null) continue;
+    const end = step.end ?? now;
+    step.time.textContent = `${Math.max(0, end - step.start).toFixed(1)}s`;
+  }
+}
+function setStep(id, status, detail) {
+  const step = trace?.steps.get(id);
+  if (!step) return null;
+  step.node.dataset.status = status;
+  step.state.textContent = STATUS_TEXT[status] || status;
+  if (status === "running" && step.start === null) step.start = traceSeconds();
+  if (["done", "failed", "skipped"].includes(status)) {
+    step.start ??= traceSeconds();
+    step.end = traceSeconds();
+  }
+  if (detail !== undefined) step.detail.textContent = detail;
+  tickTrace();
+  return step;
+}
+function buildLanes() {
+  const step = trace.steps.get("assess"),
+    lanes = el("div", undefined, "decision-lanes");
+  for (const s of suppliers) {
+    const lane = el("div", undefined, "decision-lane");
+    lane.dataset.status = "pending";
+    const head = el("div", undefined, "lane-head"),
+      status = el("span", "Waiting", "lane-status"),
+      grid = el("div", undefined, "decision-grid");
+    head.append(el("strong", s.name), status);
+    grid.style.setProperty("--cols", Math.max(1, s.evidence.length));
+    grid.setAttribute("role", "img");
+    const cells = new Map();
+    trace.criteria.forEach((c, ci) =>
+      s.evidence.forEach((e, ei) => {
+        const cell = el("span", undefined, "decision-cell");
+        cell.style.setProperty("--i", ci * s.evidence.length + ei);
+        cell.title = `${c.description || c.id} × excerpt ${ei + 1}: awaiting decision`;
+        cells.set(`${c.id}|${e.id}`, { cell, criterion: c, index: ei });
+        grid.append(cell);
+      }),
+    );
+    grid.setAttribute(
+      "aria-label",
+      `${cells.size} pending decisions for ${s.name}`,
+    );
+    lane.append(head, grid);
+    lanes.append(lane);
+    trace.lanes.set(s.supplier_id, { lane, status, grid, cells, name: s.name });
+  }
+  const key = el("div", undefined, "cell-key");
+  for (const [cls, text] of [
+    ["choice-pass", "Pass"],
+    ["choice-fail", "Fail"],
+    ["choice-unknown", "Unknown"],
+    ["choice-pass not-counted", `Below ${percent(DECISION_THRESHOLD)}`],
+  ]) {
+    const item = el("span");
+    item.append(el("span", undefined, `decision-cell ${cls}`), text);
+    key.append(item);
+  }
+  step.extra.replaceChildren(lanes, key);
+}
+function updateLane(event) {
+  const lane = trace.lanes.get(event.supplier_id);
+  if (!lane) return;
+  lane.lane.dataset.status = event.status;
+  if (event.status === "queued")
+    lane.status.textContent = "Queued · at most 3 decision calls run at once";
+  else if (event.status === "running")
+    lane.status.textContent = `Decision model answering ${lane.cells.size} questions…`;
+  else if (event.status === "skipped")
+    lane.status.textContent = event.message || "Skipped";
+  else if (event.status === "failed") {
+    trace.calls++;
+    lane.status.textContent = event.message || "Decision call failed";
+  } else if (event.status === "done") {
+    trace.calls++;
+    const tally = { pass: 0, fail: 0, unknown: 0 };
+    let belowThreshold = 0;
+    for (const a of event.answers || []) {
+      const slot = lane.cells.get(`${a.criterion_id}|${a.evidence_id}`);
+      tally[a.choice]++;
+      if (ignored(a)) belowThreshold++;
+      if (!slot) continue;
+      slot.cell.className = `decision-cell choice-${a.choice}${ignored(a) ? " not-counted" : ""}`;
+      slot.cell.title = `${slot.criterion.description || slot.criterion.id} × excerpt ${slot.index + 1}: ${labels[a.choice]} · ${percent(a.confidence)} confidence${a.counted ? "" : a.choice === "unknown" ? " · abstained" : " · below threshold, ignored"}`;
+    }
+    trace.answers += (event.answers || []).length;
+    lane.status.textContent = `${tally.pass} pass · ${tally.fail} fail · ${tally.unknown} unknown${belowThreshold ? ` · ${belowThreshold} below threshold` : ""}`;
+    lane.grid.setAttribute(
+      "aria-label",
+      `Decisions for ${lane.name}: ${lane.status.textContent}`,
+    );
+  }
+}
+function traceEvent(event) {
+  if (!trace) return;
+  if (event.type === "supplier") return updateLane(event);
+  const d = event.detail || {};
+  const model = event.model ? ` · ${event.model}` : "";
+  const texts = {
+    search: {
+      running: `Gemini is searching the web with Google Search grounding${model}.`,
+      done: `${d.citations ?? 0} cited passages returned${model}.`,
+    },
+    sources: {
+      running: "Resolving citation links to supplier websites…",
+      done: `${d.suppliers ?? 0} candidate suppliers · ${d.excerpts ?? 0} source excerpts.`,
+    },
+    fit: {
+      running: `One decision per candidate: does it offer this product?${model}`,
+      done: `${(d.answers || []).length} relevance decisions${model}. Advisory only; it does not affect rank.`,
+      failed:
+        "The relevance screen was unavailable. Candidates are shown unscreened.",
+      skipped: "No candidates to screen.",
+    },
+    assess: {
+      running: `${d.questions ?? 0} questions in ${d.calls ?? 0} decision calls${model} · answers below ${percent(d.threshold ?? DECISION_THRESHOLD)} confidence are ignored.`,
+      done: d.issues
+        ? `${d.issues} supplier${d.issues === 1 ? "" : "s"} could not be assessed.`
+        : undefined,
+    },
+    rank: {
+      running: "Mandatory gates, then weighted preferences. No model involved.",
+      done: `${d.shortlisted ?? 0} supplier${d.shortlisted === 1 ? "" : "s"} shortlisted. No model involved.`,
+    },
+  };
+  const step = setStep(
+    event.step,
+    event.status,
+    texts[event.step]?.[event.status],
+  );
+  if (event.step === "fit" && step) {
+    if (event.status === "running") {
+      const chips = el("div", undefined, "fit-chips");
+      for (const s of d.suppliers || []) {
+        const chip = el("span", undefined, "fit-chip");
+        chip.dataset.id = s.supplier_id;
+        chip.append(el("span", s.name), el("span", "…", "fit-chip-result"));
+        chips.append(chip);
+      }
+      step.extra.replaceChildren(chips);
+    }
+    if (event.status === "done") {
+      trace.calls++;
+      trace.answers += (d.answers || []).length;
+      for (const a of d.answers || []) {
+        const chip = step.extra.querySelector(
+          `[data-id="${CSS.escape(a.supplier_id)}"]`,
+        );
+        if (!chip) continue;
+        chip.dataset.choice = a.choice;
+        chip.lastChild.textContent = `${labels[a.choice]} ${percent(a.confidence)}`;
+      }
+    }
+    if (event.status === "failed") trace.calls++;
+  }
+  if (event.status === "running" && event.source === "decision")
+    notice("The decision model is now answering.");
+}
+function finishTrace(ok, message) {
+  if (!trace) return;
+  clearInterval(trace.timer);
+  for (const step of trace.steps.values()) {
+    const status = step.node.dataset.status;
+    if (status === "running") setStepNode(step, ok ? "done" : "failed");
+    else if (status === "pending" && !ok)
+      setStepNode(step, "skipped", "Not run.");
+  }
+  for (const lane of trace.lanes.values())
+    if (
+      !ok &&
+      ["pending", "queued", "running"].includes(lane.lane.dataset.status)
+    ) {
+      lane.lane.dataset.status = "failed";
+      lane.status.textContent = "Not completed";
+    }
+  $("run-trace").dataset.state = ok ? "done" : "failed";
+  $("run-trace-time").textContent = "";
+  const calls = `${trace.calls} decision-model call${trace.calls === 1 ? "" : "s"} · ${trace.answers} answer${trace.answers === 1 ? "" : "s"}`;
+  $("run-trace-summary").textContent = ok
+    ? `Finished in ${traceSeconds().toFixed(1)}s · ${calls}`
+    : `Stopped after ${traceSeconds().toFixed(1)}s · ${message || "the stage failed"}`;
+  $("run-trace-title").textContent =
+    trace.stage === "discover"
+      ? "Last run · Discovery"
+      : "Last run · Evaluation";
+}
+function setStepNode(step, status, detail) {
+  for (const [id, value] of trace.steps)
+    if (value === step) return setStep(id, status, detail);
+}
+function hideTrace() {
+  clearInterval(trace?.timer);
+  trace = null;
+  $("run-trace").hidden = true;
+}
 $("requirements").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
@@ -477,7 +870,8 @@ $("requirements").addEventListener("submit", async (event) => {
   invalidate(true);
   setWorkspaceState("searching");
   setBusy(true, "Searching supplier sources with Gemini…");
-  notice("Searching supplier sources with Gemini…");
+  startTrace("discover");
+  let ok = false;
   try {
     const job = await post();
     discoveryJobId = job.job_id;
@@ -505,6 +899,7 @@ $("requirements").addEventListener("submit", async (event) => {
     setWorkspaceState("discoveryError");
     notice("Discovery did not complete.");
   } finally {
+    finishTrace(ok);
     setBusy(false);
   }
 });
@@ -513,6 +908,8 @@ $("evaluate").addEventListener("click", async () => {
   error();
   setWorkspaceState("evaluating");
   setBusy(true, "Evaluating evidence against your criteria…");
+  startTrace("evaluate");
+  let ok = false;
   try {
     const job = await post();
     rememberJob(job.job_id);
@@ -536,6 +933,7 @@ $("evaluate").addEventListener("click", async () => {
     setWorkspaceState("evaluationError");
     notice("Evaluation did not complete.");
   } finally {
+    finishTrace(ok);
     setBusy(false);
   }
 });
@@ -632,12 +1030,17 @@ function renderCandidates() {
         `${supplier.evidence.length} source passages · ${supplier.crawl_status || "pending"} · ${supplier.identity_status === "site_identified" ? "identity from site metadata" : "identity needs verification"}`,
       ),
     );
+    const fit = fitLine(supplier);
+    if (fit) description.append(fit);
     const link = el("a", "Review evidence", "btn btn-outline-secondary btn-sm");
     link.href = "#/evidence";
     row.append(description, link);
     $("candidates").append(row);
   }
 }
+document
+  .querySelectorAll("[data-source-tag]")
+  .forEach((node) => node.replaceWith(sourceTag(node.dataset.sourceTag)));
 window.addEventListener("hashchange", () => showView());
 $("retry").addEventListener("click", () => $("requirements").requestSubmit());
 $("reset").addEventListener("click", () => reset());

@@ -24,6 +24,53 @@ def index(request):
     return render(request, "index.html")
 
 
+STREAM_TYPE = "application/x-ndjson"
+
+
+def stage_error(exc):
+    """Map a stage failure to (HTTP status, safe browser message)."""
+    if isinstance(exc, GeminiError):
+        return 502, str(exc)
+    if isinstance(exc, TimeoutError):
+        return 504, "This stage timed out. Reduce the number of criteria and retry."
+    logger.error("QuotePilot stage failed", exc_info=exc)
+    return 500, "Analysis failed unexpectedly. Please retry; server logs contain the details."
+
+
+def stream_stage(run):
+    """Run a stage in a worker thread and stream its real progress as NDJSON.
+
+    Lines are {"type": "step"|"supplier", ...} events, then exactly one
+    {"type": "result", "data": ...} or {"type": "error", "status", "error"}.
+    """
+    events = queue.Queue()
+    started = time.monotonic()
+
+    def progress(event):
+        events.put({**event, "elapsed": round(time.monotonic() - started, 2)})
+
+    def worker():
+        try:
+            events.put({"type": "result", "data": run(progress).model_dump(mode="json")})
+        except Exception as exc:  # Reported to the browser as a terminal event.
+            status, message = stage_error(exc)
+            events.put({"type": "error", "status": status, "error": message})
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def lines():
+        while True:
+            event = events.get()
+            yield json.dumps(event) + "\n"
+            if event["type"] in ("result", "error"):
+                return
+
+    response = StreamingHttpResponse(lines(), content_type=STREAM_TYPE)
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
 @require_POST
 def start_research(request):
     from backend.research.jobs import start_job

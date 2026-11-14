@@ -852,18 +852,430 @@ a {
   max-width: 65ch;
   margin-bottom: 12px;
 }
-.workspace-state #loading {
-  color: var(--qp-light);
-  margin-bottom: 16px;
-  font-size: 0.8125rem;
+
+/* Provenance tags. The decision model is the only solid, inverted chip so its
+   output is identifiable at a glance; other sources stay outlined or plain. */
+.src-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 5px;
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  color: var(--qp-muted);
+  font-size: 0.625rem;
+  font-weight: 550;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
 }
-#loading-time {
+.src-tag svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.src-decision {
+  background: var(--qp-light);
+  border-color: var(--qp-light);
+  color: var(--qp-dark);
+}
+.src-code,
+.src-rules {
+  border-color: transparent;
+}
+th .src-tag {
+  margin-left: 6px;
+  font-weight: 500;
+}
+.provenance-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.view-toolbar .provenance-key {
+  margin-left: auto;
+  margin-right: 12px;
+}
+.method-content .src-tag {
+  margin: 0 2px;
+}
+.fit-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.6875rem;
+}
+.muted,
+.fit-line .muted {
+  color: var(--qp-muted);
+}
+td small {
+  display: block;
+  color: var(--qp-muted);
+}
+.assessment-heading .src-decision {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.decision-answers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  font-size: 0.6875rem;
+}
+.decision-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--qp-line);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.decision-chip.choice-pass {
+  border-color: var(--qp-muted);
+}
+.decision-chip.choice-unknown,
+.decision-chip.not-counted {
+  border-style: dashed;
+  color: var(--qp-muted);
+}
+.decision-chip.not-counted {
+  text-decoration: line-through;
+  text-decoration-color: var(--qp-muted);
+}
+.evidence-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.evidence-meta small {
+  margin: 0;
+}
+
+/* Live run trace. */
+.run-trace {
+  margin: -4px 0 20px;
+  padding: 16px 18px 14px;
+  background: var(--qp-surface);
+  border: 1px solid var(--qp-line);
+  border-radius: 12px;
+}
+.run-trace-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+}
+.run-trace-head h3 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+.run-trace-summary {
+  color: var(--qp-muted);
+  font-size: 0.6875rem;
+}
+.run-trace-head .run-time {
+  margin-left: auto;
+}
+.run-time {
+  color: var(--qp-muted);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+.run-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--qp-muted);
+}
+.run-trace[data-state="running"] .run-indicator {
+  background: var(--qp-accent);
+  animation: qp-pulse 1.4s ease-out infinite;
+}
+.run-trace[data-state="failed"] .run-indicator {
+  background: transparent;
+  border: 1px dashed var(--qp-muted);
+}
+.run-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.run-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding-bottom: 14px;
+}
+.run-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  border-left: 1px solid var(--qp-line);
+}
+.run-step[data-status="done"]:not(:last-child)::before {
+  border-left-color: var(--qp-muted);
+}
+.run-marker {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border: 1px dashed var(--qp-line);
+  border-radius: 50%;
+  background: var(--qp-surface);
+}
+.run-step[data-status="running"] .run-marker {
+  border: 2px solid var(--qp-line);
+  border-top-color: var(--qp-accent);
+  animation: qp-spin 0.9s linear infinite;
+}
+.run-step[data-status="done"] .run-marker {
+  border: 1px solid var(--qp-light);
+  background: var(--qp-light);
+}
+.run-step[data-status="done"] .run-marker::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--qp-dark);
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+.run-step[data-status="failed"] .run-marker {
+  border: 1px solid var(--qp-muted);
+}
+.run-step[data-status="failed"] .run-marker::after {
+  content: "×";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--qp-light);
+}
+.run-step[data-status="pending"] .run-body,
+.run-step[data-status="skipped"] .run-body {
+  opacity: 0.55;
+}
+.run-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 0.75rem;
+}
+.run-state {
+  color: var(--qp-muted);
+  font-size: 0.6875rem;
+}
+.run-step[data-status="running"] .run-state {
+  color: var(--qp-light);
+}
+.run-step-head .run-time {
+  margin-left: auto;
+}
+.run-detail {
+  margin: 2px 0 0;
+  color: var(--qp-muted);
+  font-size: 0.6875rem;
+}
+.run-detail:empty {
+  display: none;
+}
+/* Decision-model steps are framed so their work stands apart from search and rules. */
+.src-step-decision .run-body {
+  padding: 8px 10px;
+  margin: -8px 0 0 -2px;
+  border: 1px solid var(--qp-line);
+  border-radius: 8px;
+}
+.src-step-decision[data-status="running"] .run-body {
+  border-color: color-mix(in srgb, var(--qp-accent) 60%, var(--qp-line));
+}
+.run-extra:empty {
+  display: none;
+}
+.run-extra {
+  margin-top: 10px;
+}
+.fit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fit-chip {
+  display: inline-flex;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px dashed var(--qp-line);
+  border-radius: 4px;
+  font-size: 0.6875rem;
+}
+.fit-chip-result {
   color: var(--qp-muted);
   font-variant-numeric: tabular-nums;
-  margin-left: 8px;
+}
+.run-step[data-status="running"] .fit-chip-result {
+  animation: qp-blink 1.2s ease-in-out infinite;
+}
+.fit-chip[data-choice] {
+  border-style: solid;
+}
+.fit-chip[data-choice="pass"] {
+  border-color: var(--qp-muted);
+}
+.fit-chip[data-choice="pass"] .fit-chip-result {
+  color: var(--qp-light);
+}
+.decision-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.decision-lane {
+  padding: 8px 10px 10px;
+  background: var(--qp-dark);
+  border: 1px solid var(--qp-line);
+  border-radius: 6px;
+  min-width: 0;
+}
+.decision-lane[data-status="running"] {
+  border-color: color-mix(in srgb, var(--qp-accent) 60%, var(--qp-line));
+}
+.lane-head {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+  font-size: 0.6875rem;
+}
+.lane-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lane-status {
+  color: var(--qp-muted);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+}
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 11px);
+  gap: 3px;
+}
+.decision-cell {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1px dashed var(--qp-line);
+  border-radius: 2px;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease;
+  transition-delay: calc(var(--i, 0) * 12ms);
+  cursor: help;
+}
+.decision-lane[data-status="running"] .decision-cell {
+  border-style: solid;
+  border-color: var(--qp-accent);
+  animation: qp-blink 1.2s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -70ms);
+}
+.decision-cell.choice-pass {
+  background: var(--qp-light);
+  border: 1px solid var(--qp-light);
+}
+.decision-cell.choice-fail {
+  border: 1px solid var(--qp-light);
+  background: linear-gradient(
+    135deg,
+    transparent 42%,
+    var(--qp-light) 42% 58%,
+    transparent 58%
+  );
+}
+.decision-cell.choice-unknown {
+  border: 1px dashed var(--qp-muted);
+}
+.decision-cell.not-counted {
+  opacity: 0.4;
+}
+.decision-lane[data-status="failed"] .decision-cell {
+  opacity: 0.3;
+}
+.cell-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 10px;
+  color: var(--qp-muted);
+  font-size: 0.625rem;
+}
+.cell-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.run-trace > .provenance-key {
+  padding-top: 10px;
+  border-top: 1px solid var(--qp-line);
+}
+@keyframes qp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes qp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--qp-accent) 70%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+@keyframes qp-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (max-width: 640px) {
+  .view-toolbar .provenance-key {
+    margin: 0;
+  }
+  .run-trace {
+    padding: 14px 12px 12px;
+  }
+  .assessment-heading {
+    flex-wrap: wrap;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .spinner-border {
-    animation: none;
+  .run-indicator,
+  .run-step[data-status="running"] .run-marker,
+  .fit-chip-result,
+  .decision-cell {
+    animation: none !important;
+    transition: none;
   }
 }

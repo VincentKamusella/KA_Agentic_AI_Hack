@@ -15,6 +15,13 @@ from backend.domain.contracts import (Contract, CriterionAssessment, EvaluationR
 from backend.integrations.gemini import GeminiError
 
 CONFIDENCE_THRESHOLD = 0.85  # Provisional hackathon threshold; not calibrated on customers.
+DECISION_MODEL = "gemini-decision-1"
+# Discovery's relevance screen must not anchor criterion-level decisions.
+SCREEN_FIELDS = {"fit_result", "fit_confidence"}
+
+
+def no_progress(event):
+    pass
 
 
 class DecisionAnswer(Contract):
@@ -22,6 +29,10 @@ class DecisionAnswer(Contract):
     choice: Literal["pass", "fail", "unknown"]
     confidence: float = Field(ge=0, le=1)
     probabilities: dict[str, float]
+
+
+def counted(answer):
+    return answer.choice != "unknown" and answer.confidence >= CONFIDENCE_THRESHOLD
 
 
 def aggregate(requirements, supplier_id, criteria):
@@ -42,14 +53,28 @@ class GeminiEvaluator:
         self.client = client
         self._semaphore = asyncio.Semaphore(3)
 
-    async def evaluate_suppliers(self, requirements, suppliers):
-        results = await asyncio.gather(*(self._evaluate(requirements, s) for s in suppliers))
+    async def evaluate_suppliers(self, requirements, suppliers, *, progress=None):
+        """`progress` receives real stage events (see web.views) for the live run trace."""
+        progress = progress or no_progress
+        progress({"type": "step", "step": "assess", "status": "running", "source": "decision",
+                  "model": DECISION_MODEL, "detail": {
+                      "threshold": CONFIDENCE_THRESHOLD,
+                      "calls": sum(bool(s.evidence) for s in suppliers),
+                      "questions": len(requirements.criteria) * sum(len(s.evidence) for s in suppliers)}})
+        results = await asyncio.gather(*(self._evaluate(requirements, s, progress) for s in suppliers))
+        progress({"type": "step", "step": "assess", "status": "done", "source": "decision",
+                  "model": DECISION_MODEL, "detail": {
+                      "issues": sum(isinstance(r, PipelineIssue) for r in results)}})
         return EvaluationResult(
             assessments=[r for r in results if isinstance(r, SupplierAssessment)],
             issues=[r for r in results if isinstance(r, PipelineIssue)],
         )
 
-    async def _evaluate(self, requirements, supplier):
+    async def _evaluate(self, requirements, supplier, progress=no_progress):
+        def report(status, **extra):
+            progress({"type": "supplier", "step": "assess", "supplier_id": supplier.supplier_id,
+                      "status": status, **extra})
+
         questions, links = {}, {}
         for ci, criterion in enumerate(requirements.criteria):
             for ei, evidence in enumerate(supplier.evidence):
@@ -70,13 +95,17 @@ class GeminiEvaluator:
                     },
                 }
         answers = {}
+        if not questions:
+            report("skipped", message="No source excerpts to assess.")
         if questions:
             try:
+                report("queued")
                 async with self._semaphore:
+                    report("running")
                     response = await self.client.post("decisions", {
-                        "model": "gemini-decision-1",
+                        "model": DECISION_MODEL,
                         "input": json.dumps({"requirements": requirements.model_dump(mode="json"),
-                                             "supplier": supplier.model_dump(mode="json")}),
+                                             "supplier": supplier.model_dump(mode="json", exclude=SCREEN_FIELDS)}),
                         "questions": questions,
                     })
                 raw = response.get("answers")
@@ -95,14 +124,18 @@ class GeminiEvaluator:
                     if a.probabilities[a.choice] < max(a.probabilities.values()):
                         raise ValueError("Inconsistent choice")
             except (GeminiError, ValidationError, ValueError) as exc:
-                return PipelineIssue(stage="evaluation", supplier_id=supplier.supplier_id,
-                                     code="evaluation_unavailable", message=str(exc) if isinstance(exc, GeminiError)
-                                     else "Gemini returned invalid or incomplete decisions; supplier was not ranked.", retryable=True)
+                issue = PipelineIssue(stage="evaluation", supplier_id=supplier.supplier_id,
+                                      code="evaluation_unavailable", message=str(exc) if isinstance(exc, GeminiError)
+                                      else "Gemini returned invalid or incomplete decisions; supplier was not ranked.", retryable=True)
+                report("failed", message=issue.message)
+                return issue
+            report("done", answers=[{
+                "criterion_id": links[key][0], "evidence_id": links[key][1], "choice": a.choice,
+                "confidence": a.confidence, "counted": counted(a)} for key, a in answers.items()])
         criteria = []
         for criterion in requirements.criteria:
-            known = [(a.choice, links[key][1]) for key, a in answers.items()
-                     if links[key][0] == criterion.id and a.choice != "unknown"
-                     and a.confidence >= CONFIDENCE_THRESHOLD]
+            mine = [(key, a) for key, a in answers.items() if links[key][0] == criterion.id]
+            known = [(a.choice, links[key][1]) for key, a in mine if counted(a)]
             outcomes = {choice for choice, _ in known}
             result = next(iter(outcomes)) if len(outcomes) == 1 else "unknown"
             evidence_ids = list(dict.fromkeys(eid for _, eid in known))
@@ -116,5 +149,7 @@ class GeminiEvaluator:
                 criterion_id=criterion.id, result=result,
                 score=(100 if result == "pass" else 0) if criterion.kind == "preference" and result != "unknown" else None,
                 evidence_ids=evidence_ids, explanation=explanation,
+                decisions=[EvidenceDecision(evidence_id=links[key][1], choice=a.choice,
+                                            confidence=a.confidence, counted=counted(a)) for key, a in mine],
             ))
         return aggregate(requirements, supplier.supplier_id, criteria)

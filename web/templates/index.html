@@ -56,6 +56,11 @@
 <button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry research</button>
 <a id="view-shortlist-action" class="btn btn-primary btn-sm" href="#/shortlist" hidden>View shortlist</a>
 </div>
+<section id="run-trace" class="run-trace" aria-labelledby="run-trace-title" hidden>
+<div class="run-trace-head"><span class="run-indicator" aria-hidden="true"></span><h3 id="run-trace-title">Live run</h3><span id="run-trace-summary" class="run-trace-summary"></span><span id="run-trace-time" class="run-time" aria-hidden="true"></span></div>
+<ol id="run-steps" class="run-steps"></ol>
+<div class="provenance-key" aria-label="Provenance key"><span data-source-tag="decision"></span><span data-source-tag="search"></span><span data-source-tag="code"></span><span data-source-tag="rules"></span></div>
+</section>
 <div class="research-totals" aria-label="Research summary"><div><span>Discovered suppliers</span><strong id="total-suppliers">0</strong></div><div><span>Source excerpts</span><strong id="total-evidence">0</strong></div><div><span>Shortlisted</span><strong id="total-shortlist">0</strong></div></div>
 <div id="coverage" class="mt-3" aria-live="polite" hidden></div>
 <div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Update shortlist <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
@@ -67,7 +72,7 @@
 <div id="shortlist-evidence-link" hidden><a class="btn btn-outline-secondary btn-sm" href="#/evidence">Inspect supporting evidence →</a></div>
 </section>
 <section id="view-evidence" data-view="evidence" aria-labelledby="page-title" hidden>
-<div class="view-toolbar"><span class="subtle">Source excerpts, criterion assessments, and clarification drafts.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Back to discovery</a></div>
+<div class="view-toolbar"><span class="subtle">Source excerpts, criterion assessments, and clarification drafts.</span><span class="provenance-key compact"><span data-source-tag="decision"></span><span data-source-tag="search"></span></span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Back to discovery</a></div>
 <div id="evidence-empty" class="view-empty"><h2>No source evidence yet.</h2><p>Run discovery to collect supplier sources. Evaluation adds criterion-level assessments.</p><a class="btn btn-primary" href="#/discovery">Find suppliers</a></div>
 <div id="sources"></div>
 </section>
