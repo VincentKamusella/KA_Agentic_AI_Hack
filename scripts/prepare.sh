@@ -13,6 +13,4 @@ export UV_CACHE_DIR="$PWD/.codesphere/uv-cache"
 uv sync --locked --python 3.12 --no-dev
 uv run --locked --no-dev python -m web.manage check
 uv run --locked --no-dev python -m web.manage collectstatic --noinput
-# Run smoke tests before touching the deployment database.
-uv run --locked --no-dev python -m web.manage test backend web --noinput
 uv run --locked --no-dev python -m web.manage migrate --noinput

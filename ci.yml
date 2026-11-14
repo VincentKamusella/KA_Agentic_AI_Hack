@@ -1,4 +1,4 @@
-schemaVersion: v0.4
+schemaVersion: v0.5
 prepare:
   steps:
     - name: Prepare Django application
@@ -6,18 +6,17 @@ prepare:
 test:
   steps:
     - name: Check application
-      command: bash scripts/check.sh
+      command: bash scripts/deploy-check.sh
 run:
-  django:
+  web:
+    plan: 8
     replicas: 1
+    healthEndpoint: http://localhost:3000/health/
     network:
       ports:
-        - port: 3000
-          isPublic: false
-      paths:
-        - path: /
-          port: 3000
-          stripPath: false
+        - 3000
+      landscapeGateway:
+        httpPort: 3000
     volumeMounts:
       - name: _workspace
         mountPath: /home/user/app
@@ -26,12 +25,12 @@ run:
       - name: Run Django with Gunicorn
         command: bash scripts/start.sh
   worker:
+    plan: 8
     replicas: 2
+    healthEndpoint: http://localhost:3000/health/
     network:
       ports:
-        - port: 3000
-          isPublic: false
-      paths: []
+        - 3000
     volumeMounts:
       - name: _workspace
         mountPath: /home/user/app
