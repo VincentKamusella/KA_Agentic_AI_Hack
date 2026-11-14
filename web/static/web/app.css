@@ -1442,6 +1442,86 @@ h2 {
   margin-top: 12px;
 }
 
+/* ---------- Account pages: history, old suppliers, preferences ---------- */
+
+.account-email {
+  margin: 8px 0 0;
+  padding: 0 11px;
+  overflow: hidden;
+  color: var(--qp-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app:not(.nav-open) .account-email {
+  display: none;
+}
+#sign-out {
+  margin: 0;
+}
+.record-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.record-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  padding: 18px 0;
+  border-top: 1px solid var(--qp-line);
+}
+.record-list li > div:first-child {
+  min-width: 0;
+}
+.record-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--qp-light);
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+button.record-title {
+  color: var(--qp-accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+button.record-title:hover {
+  color: var(--qp-light);
+}
+.record-meta {
+  margin-top: 4px;
+  color: var(--qp-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.record-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pref-area {
+  display: flex;
+  gap: 8px;
+}
+.pref-area .area-button {
+  min-width: 0;
+}
+#pref-unit-custom-field {
+  margin-top: 8px;
+}
+
 /* ---------- Provenance, fit and decision-model detail ---------- */
 
 .muted {

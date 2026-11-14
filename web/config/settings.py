@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'backend.apps.BackendConfig',
+    'web.accounts.apps.AccountsConfig',
 ]
 
 MIDDLEWARE = [
@@ -100,6 +101,15 @@ DATABASES = {'default': dj_database_url.parse(
     database_url, conn_max_age=60, conn_health_checks=True,
 )}
 DATABASES['default'].setdefault('OPTIONS', {}).setdefault('connect_timeout', 10)
+
+
+# Accounts: email and password. The workspace and its APIs require sign-in.
+LOGIN_URL = 'sign-in'
+LOGIN_REDIRECT_URL = 'workspace'
+# No mail service is configured yet: password-reset emails are written to the
+# server log instead of being sent.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'QuotePilot <no-reply@quotepilot.local>'
 
 
 # Password validation

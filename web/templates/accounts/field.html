@@ -1,0 +1,6 @@
+<div class="field">
+  <label class="form-label" for="{{ field.id_for_label }}">{{ label }}</label>
+  <input class="form-control" id="{{ field.id_for_label }}" name="{{ field.html_name }}" type="{{ type }}" autocomplete="{{ autocomplete }}" required {% if field.errors %}aria-invalid="true" aria-describedby="{{ field.id_for_label }}-error"{% endif %} {% if type != "password" and field.value %}value="{{ field.value }}"{% endif %} {% if autofocus %}autofocus{% endif %}>
+  {% if help %}<p class="help">{{ help }}</p>{% endif %}
+  {% if field.errors %}<p class="field-error" id="{{ field.id_for_label }}-error">{{ field.errors|join:" " }}</p>{% endif %}
+</div>

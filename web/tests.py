@@ -5,16 +5,29 @@ from django.test import SimpleTestCase, Client, override_settings
 from backend.tests.support import demo_fixture
 
 
+class SignedIn:
+    """These tests run without a database: stand in for a signed-in account
+    that owns every job, and skip writing the ownership record."""
+
+    def setUp(self):
+        super().setUp()
+        for target, value in [('web.views.account', object()), ('web.views.accounts.owns', True),
+                              ('web.views.accounts.record_search', None)]:
+            patcher = patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
                    STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
-class DeploymentSmokeTests(SimpleTestCase):
+class DeploymentSmokeTests(SignedIn, SimpleTestCase):
     def test_health(self):
         response = self.client.get('/health/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'status': 'ok'})
 
     def test_workspace(self):
-        response = self.client.get('/')
+        response = self.client.get('/app/')
         self.assertContains(response, 'Supplier workspace')
         self.assertIn('csrftoken', response.cookies)
 
@@ -55,14 +68,14 @@ class DeploymentSmokeTests(SimpleTestCase):
 
     def test_demo_is_removed(self):
         self.assertEqual(self.client.get('/api/demo/').status_code, 404)
-        self.assertNotContains(self.client.get('/'), 'Fictional demo')
+        self.assertNotContains(self.client.get('/app/'), 'Fictional demo')
         payload = {**demo_fixture()['request'], 'demo': True}
         result = self.client.post('/api/research/', data=json.dumps(payload), content_type='application/json')
         self.assertEqual(result.status_code, 400)
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
-class ResearchApiTests(SimpleTestCase):
+class ResearchApiTests(SignedIn, SimpleTestCase):
     def test_simple_brief_is_queued_without_criteria(self):
         payload = {'requirements': {'product': 'Containers', 'quantity': 2.5,
             'quantity_unit': 'kg', 'delivery_country': 'Germany', 'needed_by': None,
@@ -116,9 +129,35 @@ class ResearchApiTests(SimpleTestCase):
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
                    DATA_UPLOAD_MAX_MEMORY_SIZE=100)
-class BodyLimitTests(SimpleTestCase):
+class BodyLimitTests(SignedIn, SimpleTestCase):
     def test_oversized_body_returns_json_413_for_both_api_styles(self):
         for endpoint in ('/api/research/',):
             response = self.client.post(endpoint, data='x' * 101, content_type='application/json')
             self.assertEqual(response.status_code, 413)
             self.assertEqual(response.json()['error'], 'Request is too large.')
+
+
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
+                   STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class SignedOutTests(SimpleTestCase):
+    def test_landing_is_public_and_offers_both_account_actions(self):
+        response = self.client.get('/')
+        self.assertContains(response, 'href="/signup/"')
+        self.assertContains(response, 'href="/signin/"')
+        self.assertContains(response, 'Illustrative example')
+
+    def test_workspace_redirects_to_sign_in(self):
+        self.assertRedirects(self.client.get('/app/'), '/signin/?next=/app/', fetch_redirect_response=False)
+
+    def test_apis_require_sign_in(self):
+        payload = json.dumps(demo_fixture()['request'])
+        for response in [
+            self.client.post('/api/research/', data=payload, content_type='application/json'),
+            self.client.get('/api/research/' + 'a' * 64 + '/'),
+            self.client.post('/api/suggest-criteria/', data='{}', content_type='application/json'),
+            self.client.get('/api/history/'),
+            self.client.get('/api/suppliers/'),
+            self.client.get('/api/preferences/'),
+        ]:
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json()['error'], 'Sign in to continue.')

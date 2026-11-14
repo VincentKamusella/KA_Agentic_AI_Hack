@@ -25,7 +25,15 @@ In a second terminal, start the research worker:
 uv run python -m web.manage research_worker
 ```
 
-Open http://127.0.0.1:8000/. Enter your purchase brief and criteria, choose **Find my shortlist**.
+Open http://127.0.0.1:8000/ and create an account, or create the local test account (`test@quotepilot.local` / `quotepilot-test`, refused unless `DJANGO_DEBUG` is true):
+
+```sh
+uv run python -m web.manage create_test_account
+```
+
+Sign in, enter your purchase brief, and choose **Find my shortlist**. Password-reset emails are written to the server log; no mail service is configured.
+
+To look at the interface without Gemini, PostgreSQL, or a worker, run `uv run python scripts/preview_ui.py` (fictional data, http://127.0.0.1:8001/).
 
 ## Development
 
