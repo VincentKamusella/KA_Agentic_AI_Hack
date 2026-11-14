@@ -562,8 +562,7 @@ function render() {
   renderCoverage();
   renderSources();
   const researchDetails = $("research-details");
-  if (researchDetails)
-    researchDetails.hidden = busy() || state.restoring || !state.result;
+  if (researchDetails) researchDetails.hidden = true;
   if (busy()) {
     for (const id of [
       "requirements-block",
@@ -1058,16 +1057,6 @@ function renderContactRecommendations() {
     );
     return;
   }
-  const researchDetails = $("research-details");
-  if (researchDetails)
-    researchDetails.append(
-      h(
-        "div",
-        { id: "recommendation-overview", class: "content-block" },
-        h("h2", { text: "Recommendation summary" }),
-        h("p", { class: "contact-summary", text: report.summary }),
-      ),
-    );
   if (report.no_eligible_suppliers && report.recommendations.length)
     host.append(
       h("p", {

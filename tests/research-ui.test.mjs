@@ -834,7 +834,7 @@ test("saved recommendations show contact priority, qualification, citations and 
     section.querySelector(".contact-citations a").href,
     "https://alpha.example/about",
   );
-  assert.equal(d.getElementById("research-details").open, false);
+  assert.equal(d.getElementById("research-details").hidden, true);
   const compose = section.querySelector(".contact-compose");
   assert.equal(compose.closest("details"), null);
   const mail = new URL(compose.href);
@@ -940,11 +940,8 @@ test("recommendation text is untrusted and blocked clipboard access has a manual
   const section = d.getElementById("contact-recommendations");
   assert.equal(section.querySelector("img, script"), null);
   assert.equal(section.querySelector('a[href^="javascript:"]'), null);
-  assert.match(d.getElementById("recommendation-overview").textContent, /<img/);
-  assert.equal(
-    d.getElementById("recommendation-overview").querySelector("img"),
-    null,
-  );
+
+  assert.equal(d.querySelector("#recommendation-overview"), null);
   section.querySelector('[data-action="copy"]').click();
   await settle(() => /Copying is blocked/.test(text(d, "notice")));
   assert.equal(d.activeElement.id, "contact-email-0");
