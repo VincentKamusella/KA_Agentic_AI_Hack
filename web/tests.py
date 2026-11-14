@@ -26,6 +26,30 @@ class DeploymentSmokeTests(SimpleTestCase):
         for route in ['/api/discover/', '/api/evaluate/', '/api/evaluate-jobs/']:
             self.assertEqual(self.client.post(route, data='{}', content_type='application/json').status_code, 404)
 
+    @patch("web.views.GeminiClient")
+    @patch("web.views.GeminiDiscovery", return_value=DemoDiscovery())
+    @patch("web.views.GeminiEvaluator", return_value=DemoEvaluator())
+    def test_streamed_stage_ends_with_result(self, *mocks):
+        payload = demo_fixture()['request']
+        payload['suppliers'] = demo_fixture()['response']['suppliers']
+        response = self.client.post('/api/evaluate/', data=json.dumps(payload), content_type='application/json',
+                                    HTTP_ACCEPT='application/x-ndjson')
+        self.assertEqual(response['Content-Type'], 'application/x-ndjson')
+        events = [json.loads(line) for line in b''.join(response.streaming_content).splitlines()]
+        self.assertEqual([(e['step'], e['status']) for e in events[:-1]], [('rank', 'running'), ('rank', 'done')])
+        self.assertEqual(events[-1]['type'], 'result')
+        self.assertEqual(events[-1]['data']['recommended_supplier_ids'], ['alpha'])
+
+    def test_streamed_stage_reports_errors_as_final_event(self):
+        async def failing(*args, **kwargs):
+            raise GeminiError('Gemini returned HTTP 429.')
+
+        with patch('web.views.GeminiClient'), patch('web.views.GeminiDiscovery.discover_suppliers', side_effect=failing):
+            response = self.client.post('/api/discover/', data=json.dumps(demo_fixture()['request']),
+                                        content_type='application/json', HTTP_ACCEPT='application/x-ndjson')
+            last = json.loads(b''.join(response.streaming_content).splitlines()[-1])
+        self.assertEqual(last, {'type': 'error', 'status': 502, 'error': 'Gemini returned HTTP 429.'})
+
     def test_invalid_inputs(self):
         for data in ('invalid', '{}', 'null'):
             result = self.client.post('/api/research/', data=data, content_type='application/json')

@@ -119,6 +119,78 @@ class EvaluationTests(unittest.TestCase):
         broken['steps'][0]['content'][0]['annotations'].pop()
         self.assertFalse(extract_candidates(broken, "bolts")[0])
 
+    def test_progress_events_and_raw_decisions_are_reported(self):
+        events = []
+        result = asyncio.run(GeminiEvaluator(FakeClient({'c0_e0': 'fail'}, confidence=.9)).evaluate_suppliers(
+            self.requirements, [self.supplier], progress=events.append))
+        self.assertEqual([(e['type'], e['status']) for e in events], [
+            ('step', 'running'), ('supplier', 'queued'), ('supplier', 'running'),
+            ('supplier', 'done'), ('step', 'done')])
+        self.assertTrue(all(e['step'] == 'assess' for e in events))
+        answers = events[3]['answers']
+        self.assertEqual(len(answers), len(self.requirements.criteria) * len(self.supplier.evidence))
+        self.assertEqual(answers[0]['choice'], 'fail')
+        decision = result.assessments[0].criteria[0].decisions[0]
+        self.assertEqual((decision.choice, decision.confidence, decision.counted), ('fail', .9, True))
+
+    def test_low_confidence_decisions_are_recorded_but_not_counted(self):
+        criterion = self.run_eval(FakeClient(confidence=.6)).assessments[0].criteria[0]
+        self.assertEqual(criterion.result, 'unknown')
+        self.assertFalse(any(d.counted for d in criterion.decisions))
+
+    def test_relevance_screen_never_reaches_evaluation_input(self):
+        client = FakeClient()
+        self.supplier.fit_result, self.supplier.fit_confidence = 'pass', .99
+        self.run_eval(client)
+        self.assertNotIn('fit_', client.calls[0][1]['input'])
+
+    def test_failed_call_reports_supplier_failure(self):
+        events = []
+        asyncio.run(GeminiEvaluator(FakeClient(error=GeminiError('Unavailable'))).evaluate_suppliers(
+            self.requirements, [self.supplier], progress=events.append))
+        self.assertEqual(events[3]['status'], 'failed')
+        self.assertEqual(events[3]['message'], 'Unavailable')
+
+
+class DiscoveryRelevanceTests(unittest.TestCase):
+    response = {'status': 'completed', 'steps': [{'type': 'model_output', 'content': [{
+        'type': 'text', 'text': 'We make bolts.',
+        'annotations': [dict(type='url_citation', url='https://alpha.example/about', start_index=0, end_index=14)],
+    }]}]}
+
+    def discover(self, decisions):
+        from backend.discovery import GeminiDiscovery
+
+        class Client:
+            async def post(self, endpoint, payload):
+                if endpoint == 'interactions':
+                    return copy.deepcopy(DiscoveryRelevanceTests.response)
+                if isinstance(decisions, Exception):
+                    raise decisions
+                return {'answers': {key: decisions for key in payload['questions']}}
+
+        events = []
+        requirements = Requirements.model_validate(demo_fixture()['request']['requirements'])
+        result = asyncio.run(GeminiDiscovery(Client()).discover_suppliers(
+            requirements, options=DiscoveryOptions(), progress=events.append))
+        return result, events
+
+    def test_relevance_screen_labels_candidates(self):
+        result, events = self.discover({'choice': 'pass', 'confidence': .91})
+        self.assertEqual((result.suppliers[0].fit_result, result.suppliers[0].fit_confidence), ('pass', .91))
+        self.assertEqual([(e['step'], e['status']) for e in events], [
+            ('search', 'running'), ('search', 'done'), ('sources', 'running'), ('sources', 'done'),
+            ('fit', 'running'), ('fit', 'done')])
+        self.assertEqual(events[-1]['source'], 'decision')
+
+    def test_malformed_or_failed_screen_leaves_candidates_unscreened(self):
+        result, _ = self.discover({'choice': 'maybe', 'confidence': 2})
+        self.assertIsNone(result.suppliers[0].fit_result)
+        result, events = self.discover(GeminiError('down'))
+        self.assertEqual(len(result.suppliers), 1)
+        self.assertEqual(events[-1]['status'], 'failed')
+        self.assertIn('relevance_unavailable', [i.code for i in result.issues])
+
 
 class CitationRedirectTests(unittest.TestCase):
     def test_google_redirect_is_resolved_without_fetching_destination(self):

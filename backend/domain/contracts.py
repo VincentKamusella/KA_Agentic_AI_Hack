@@ -75,6 +75,7 @@ class CriterionAssessment(Contract):
     score: float | None = Field(default=None, ge=0, le=100)
     evidence_ids: list[str] = Field(default_factory=list)
     explanation: str = Field(min_length=1)
+    decisions: list[EvidenceDecision] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence_and_score(self) -> "CriterionAssessment":

@@ -17,3 +17,8 @@ A compact sidebar contains only working workspace navigation. The main area has 
 ## Workspace states
 
 The purchase brief is primary before discovery; criteria remain beside the supplier workspace. The workspace presents one task-specific state: ready, searching, candidates ready, evaluating, evaluated, no usable evidence, or stage failure. Each explains what happened and the next action. Pending states show real elapsed time, never simulated percentages. Counts appear only after suppliers exist. Discovery failures retain inputs; evaluation failures retain candidates. Empty results must not look like successful evaluation. Navigation separates discovery, shortlist, source evidence, and method views.
+
+## Live runs and provenance
+
+Pending stages render a live run trace from real server events: planned steps, actual per-step durations, and one criterion × excerpt matrix per supplier that fills when its decision call returns. Blue appears only on running elements. Every model-derived value carries a `sourceTag()`: the solid, inverted **Decision model** chip is reserved for `gemini-decision-1` output; **Search model**, **Code**, and **Rules** stay outlined or plain. Show decision confidence next to decision results, and mark answers ignored under the threshold with dashed, struck-through chips.
+
