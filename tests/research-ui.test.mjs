@@ -157,11 +157,7 @@ function setup(fetch, saved = null, account = false) {
   // Account requests get neutral answers unless a test supplies its own.
   window.fetch = async (url, init) => {
     if (!account && String(url).startsWith("/api/preferences/"))
-      return reply({
-        quantity_unit: "",
-        delivery_area: null,
-        other_requirements: "",
-      });
+      return reply({ preferences: [], limit: 10 });
     return fetch(url, init);
   };
   window.setInterval = () => 1;
@@ -800,16 +796,30 @@ test("the progress panel lists the research steps with their real status", async
   ]);
 });
 
-test("saved preferences prefill a new brief and are restored after a new search", async (t) => {
+test("saved preferences are offered on the brief and applied only when chosen", async (t) => {
   const calls = [];
   const dom = setup(
     async (url, init) => {
       calls.push({ url, init });
       if (url === "/api/preferences/")
         return reply({
-          quantity_unit: "pallets",
-          delivery_area: { type: "continents", continents: ["Europe"] },
-          other_requirements: "ISO 9001 required",
+          limit: 10,
+          preferences: [
+            {
+              id: 4,
+              name: "Fasteners",
+              quantity_unit: "pallets",
+              delivery_area: { type: "continents", continents: ["Europe"] },
+              other_requirements: "ISO 9001 required",
+            },
+            {
+              id: 5,
+              name: "Bulk",
+              quantity_unit: "kg",
+              delivery_area: null,
+              other_requirements: "",
+            },
+          ],
         });
       if (init?.method === "POST")
         return reply({ job_id: jobId, status: "queued" }, 202);
@@ -820,13 +830,24 @@ test("saved preferences prefill a new brief and are restored after a new search"
   );
   t.after(() => dom.window.close());
   const d = dom.window.document;
-  await settle(() => d.getElementById("other").value !== "");
-  assert.equal(d.getElementById("unit").value, "custom");
-  assert.equal(d.getElementById("unit-custom").value, "pallets");
-  assert.equal(text(d, "area-text"), "Europe");
-  assert.equal(d.getElementById("pref-other").value, "ISO 9001 required");
+  await settle(() => d.querySelectorAll("#presets-list .preset").length === 2);
+  // Nothing is applied on its own, and the panel starts closed.
+  assert.equal(d.getElementById("unit").value, "pieces");
+  assert.equal(d.getElementById("other").value, "");
+  assert.equal(d.getElementById("presets-panel").hidden, true);
   d.getElementById("product").value = "Steel bolts";
   d.getElementById("quantity").value = "10";
+  d.getElementById("presets-open").click();
+  assert.equal(d.getElementById("presets-panel").hidden, false);
+  assert.equal(
+    d.getElementById("presets-open").getAttribute("aria-expanded"),
+    "true",
+  );
+  d.querySelector("#presets-list .preset").click();
+  assert.equal(d.getElementById("presets-panel").hidden, true);
+  assert.equal(d.getElementById("unit-custom").value, "pallets");
+  assert.equal(text(d, "area-text"), "Europe");
+  assert.equal(d.getElementById("product").value, "Steel bolts");
   submit(dom);
   await settle(() => posts(calls).length === 1);
   assert.deepEqual(posts(calls)[0].requirements, {
@@ -839,46 +860,85 @@ test("saved preferences prefill a new brief and are restored after a new search"
   });
 });
 
-test("preferences are saved with the chosen unit, destination and text", async (t) => {
+test("preferences can be created, edited and deleted, up to the limit", async (t) => {
   const calls = [];
-  const empty = {
-    quantity_unit: "",
-    delivery_area: null,
-    other_requirements: "",
-  };
+  let saved = [];
   const dom = setup(
     async (url, init) => {
       calls.push({ url, init });
+      const body = init?.body ? JSON.parse(init.body) : null;
+      if (url === "/api/preferences/" && init?.method === "POST") {
+        saved.push({ id: saved.length + 1, ...body });
+        return reply(saved.at(-1), 201);
+      }
       if (url === "/api/preferences/")
-        return reply(init?.method === "PUT" ? JSON.parse(init.body) : empty);
+        return reply({ preferences: saved, limit: 2 });
+      if (init?.method === "PUT") return reply({ id: 1, ...body });
+      if (init?.method === "DELETE") return reply({ deleted: 1 });
       return reply({ features: [] });
     },
     null,
     true,
   );
   t.after(() => dom.window.close());
+  dom.window.confirm = () => true;
   const d = dom.window.document;
   const event = (type) =>
     new dom.window.Event(type, { bubbles: true, cancelable: true });
-  await settle(() => calls.some((c) => c.url === "/api/preferences/"));
+  const save = () =>
+    d.getElementById("preferences-form").dispatchEvent(event("submit"));
+  await settle(() => /0 of 2/.test(text(d, "pref-count")));
+  assert.equal(d.getElementById("preferences-form").hidden, true);
+
+  d.getElementById("pref-new").click();
+  save(); // no name yet
+  assert.match(text(d, "pref-error"), /name/);
+  d.getElementById("pref-name").value = "Fasteners";
   d.getElementById("pref-unit").value = "kg";
   d.getElementById("pref-area-open").click();
   d.getElementById("scope-world").checked = true;
   d.getElementById("scope-world").dispatchEvent(event("change"));
   d.getElementById("area-confirm").click();
   d.getElementById("pref-other").value = "Samples required";
-  d.getElementById("preferences-form").dispatchEvent(event("submit"));
-  await settle(() => /Saved/.test(text(d, "pref-status")));
-  const put = calls.find((c) => c.init?.method === "PUT");
-  assert.deepEqual(JSON.parse(put.init.body), {
-    quantity_unit: "kg",
-    delivery_area: { type: "world" },
-    other_requirements: "Samples required",
-  });
-  // The default was chosen for Preferences and then applied to the empty brief.
-  assert.equal(text(d, "pref-area-text"), "Worldwide");
-  assert.equal(d.getElementById("unit").value, "kg");
-  assert.equal(d.getElementById("other").value, "Samples required");
+  save();
+  await settle(() => /1 of 2/.test(text(d, "pref-count")));
+  assert.deepEqual(
+    JSON.parse(calls.find((c) => c.init?.method === "POST").init.body),
+    {
+      name: "Fasteners",
+      quantity_unit: "kg",
+      delivery_area: { type: "world" },
+      other_requirements: "Samples required",
+    },
+  );
+  assert.match(text(d, "pref-list"), /Destination: Worldwide/);
+  // The brief was not touched by saving.
+  assert.equal(d.getElementById("unit").value, "pieces");
+
+  d.querySelector("#pref-list button").click(); // Edit
+  assert.equal(d.getElementById("pref-name").value, "Fasteners");
+  d.getElementById("pref-name").value = "Bolts";
+  save();
+  await settle(() => /Bolts/.test(text(d, "pref-list")));
+  assert.equal(
+    calls.find((c) => c.init?.method === "PUT").url,
+    "/api/preferences/1/",
+  );
+
+  d.getElementById("pref-new").click();
+  d.getElementById("pref-name").value = "Second";
+  save();
+  await settle(() => /2 of 2/.test(text(d, "pref-count")));
+  assert.equal(d.getElementById("pref-new").disabled, true);
+
+  d.querySelectorAll("#pref-list button")[1].click(); // Delete the first
+  await settle(() => /1 of 2/.test(text(d, "pref-count")));
+  assert.equal(
+    calls.find((c) => c.init?.method === "DELETE").url,
+    "/api/preferences/1/",
+  );
+  assert.doesNotMatch(text(d, "pref-list"), /Bolts/);
+  assert.equal(d.getElementById("pref-new").disabled, false);
 });
 
 test("history lists the account's searches and opens one in the workspace", async (t) => {

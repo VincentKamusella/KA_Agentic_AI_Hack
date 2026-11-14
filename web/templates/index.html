@@ -75,8 +75,19 @@
         <h1 id="brief-title">New supplier search</h1>
         <p>Describe the purchase in your own words. QuotePilot turns it into requirements, searches for suppliers, and checks the evidence it finds against each requirement.</p>
       </div>
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+      <div class="head-actions">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-action="reset">New search</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="presets-open" aria-expanded="false" aria-controls="presets-panel" data-busy-lock>Preferences</button>
+      </div>
     </div>
+    <section id="presets-panel" class="presets-panel" aria-labelledby="presets-title" hidden>
+      <div class="block-head">
+        <h2 id="presets-title">Apply saved preferences</h2>
+        <a href="#/preferences">Manage preferences</a>
+      </div>
+      <p class="help" id="presets-help"></p>
+      <ul id="presets-list" class="presets-list"></ul>
+    </section>
     <form id="brief-form" class="brief-form" novalidate>
       <fieldset id="brief-fields">
         <div id="form-error" class="note note-error" role="alert" tabindex="-1" hidden></div>
@@ -250,11 +261,23 @@
     <div class="page-head">
       <div>
         <h1 id="preferences-title">Preferences</h1>
-        <p>Defaults for your account. They prefill a new brief; you can still change them for each search.</p>
+        <p>Save up to ten sets of brief details for the purchases you repeat. On the brief, the Preferences button lets you apply one; nothing is applied on its own.</p>
       </div>
     </div>
-    <form id="preferences-form" class="brief-form" novalidate>
-      <section class="form-block">
+    <div class="toolbar-row">
+      <p id="pref-count" class="toolbar-title"></p>
+      <button type="button" id="pref-new" class="btn btn-primary btn-sm btn-icon"><svg aria-hidden="true"><use href="#i-plus"/></svg>New preferences</button>
+    </div>
+    <p class="help" id="pref-status" role="status" aria-live="polite"></p>
+    <ul id="pref-list" class="record-list"></ul>
+
+    <form id="preferences-form" class="brief-form pref-editor" novalidate hidden>
+      <section class="form-block" aria-labelledby="pref-editor-title">
+        <h2 id="pref-editor-title">New preferences</h2>
+        <div class="field">
+          <label class="form-label" for="pref-name">Name</label>
+          <input class="form-control" id="pref-name" maxlength="60" placeholder="For example: Fasteners, EU delivery" aria-describedby="pref-error">
+        </div>
         <div class="field-row">
           <div class="field">
             <label class="form-label" for="pref-unit">Quantity unit</label>
@@ -274,20 +297,20 @@
           <div class="field">
             <span class="form-label" id="pref-area-label">Delivery destination</span>
             <div class="pref-area">
-              <button type="button" id="pref-area-open" class="form-control area-button" aria-labelledby="pref-area-label pref-area-text"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="pref-area-text">No default</span></button>
+              <button type="button" id="pref-area-open" class="form-control area-button" aria-labelledby="pref-area-label pref-area-text"><svg aria-hidden="true"><use href="#i-pin"/></svg><span id="pref-area-text">None</span></button>
               <button type="button" id="pref-area-clear" class="btn btn-outline-secondary" hidden>Clear</button>
             </div>
           </div>
         </div>
         <div class="field">
           <label class="form-label" for="pref-other">Other requirements <span class="optional">Optional</span></label>
-          <textarea class="form-control" id="pref-other" maxlength="4000" rows="4" placeholder="Requirements you ask of every supplier, for example: ISO 9001 certification required."></textarea>
-          <p class="help">Added to the “Other requirements” field of every new brief.</p>
+          <textarea class="form-control" id="pref-other" maxlength="4000" rows="4" placeholder="Requirements that go with these preferences, for example: ISO 9001 certification required."></textarea>
         </div>
+        <p class="field-error" id="pref-error" role="alert" hidden></p>
       </section>
       <div class="action-bar">
-        <button type="submit" class="btn btn-primary" id="pref-save">Save preferences</button>
-        <p class="help" id="pref-status" role="status" aria-live="polite"></p>
+        <button type="submit" class="btn btn-primary" id="pref-save">Save</button>
+        <button type="button" class="btn btn-outline-secondary" id="pref-cancel">Cancel</button>
       </div>
     </form>
   </section>

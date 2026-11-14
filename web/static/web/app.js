@@ -2111,7 +2111,6 @@ function reset() {
   rememberArea(null);
   $("brief-form").reset();
   setArea(null);
-  applyDefaults();
   clearErrors();
   go("brief");
   render();
@@ -2650,10 +2649,12 @@ function initAreaPicker() {
 
 /* ---------- Account: history, old suppliers, preferences ---------- */
 
-let prefArea = null; // default delivery destination, same shape as `area`
-let preferences = null; // as saved on the server, once loaded
+let prefArea = null; // destination in the preferences editor, shaped like `area`
+let presets = []; // this account's saved preferences
+let presetLimit = 10;
+let editingPreset = null; // id being edited, "new", or null when the editor is closed
 
-async function accountRequest(url, body) {
+async function accountRequest(url, { method, body } = {}) {
   const csrf = document.cookie
     .split("; ")
     .find((x) => x.startsWith("csrftoken="))
@@ -2663,14 +2664,14 @@ async function accountRequest(url, body) {
     response = await fetch(url, {
       cache: "no-store",
       signal: AbortSignal.timeout(20000),
-      ...(body
+      ...(method
         ? {
-            method: "PUT",
+            method,
             headers: {
               "Content-Type": "application/json",
               "X-CSRFToken": csrf || "",
             },
-            body: JSON.stringify(body),
+            body: body ? JSON.stringify(body) : undefined,
           }
         : {}),
     });
@@ -2835,67 +2836,192 @@ function loadSuppliers() {
 
 function setPrefArea(value) {
   prefArea = value;
-  $("pref-area-text").textContent = value ? areaLabel(value) : "No default";
+  $("pref-area-text").textContent = value ? areaLabel(value) : "None";
   $("pref-area-open").classList.toggle("is-empty", !value);
   $("pref-area-clear").hidden = !value;
 }
 
-function showPreferences() {
-  const unit = preferences?.quantity_unit || "pieces";
-  $("pref-unit").value = UNITS.includes(unit) ? unit : "custom";
-  $("pref-unit-custom").value = UNITS.includes(unit) ? "" : unit;
-  $("pref-unit-custom-field").hidden = $("pref-unit").value !== "custom";
-  setPrefArea(preferences?.delivery_area || null);
-  $("pref-other").value = preferences?.other_requirements || "";
-}
+const presetSummary = (p) =>
+  [
+    `Unit: ${p.quantity_unit || "pieces"}`,
+    p.delivery_area
+      ? `Destination: ${areaLabel(p.delivery_area)}`
+      : "No destination",
+    p.other_requirements
+      ? `Other requirements: ${p.other_requirements}`
+      : "No other requirements",
+  ].join(" · ");
 
-/* Prefill an untouched brief with this account's defaults. */
-function applyDefaults() {
-  if (!preferences) return;
-  const unit = preferences.quantity_unit || "pieces";
+/* Fill the brief from one saved set. Only ever done on request. */
+function applyPreset(preset) {
+  const unit = preset.quantity_unit || "pieces";
   $("unit").value = UNITS.includes(unit) ? unit : "custom";
   $("unit-custom").value = UNITS.includes(unit) ? "" : unit;
   $("unit-custom-field").hidden = $("unit").value !== "custom";
-  if (preferences.delivery_area) setArea(preferences.delivery_area);
-  $("other").value = preferences.other_requirements || "";
+  if (preset.delivery_area) {
+    setArea(preset.delivery_area);
+    rememberArea(preset.delivery_area);
+    clearFieldError("area-error", "area-open");
+  }
+  $("other").value = preset.other_requirements || "";
+  togglePresets(false);
+  announce(`Applied the preferences “${preset.name}” to the brief.`);
+  $("product").focus();
 }
 
-async function loadPreferences(applyToBrief) {
+function togglePresets(open) {
+  $("presets-panel").hidden = !open;
+  $("presets-open").setAttribute("aria-expanded", String(open));
+}
+
+function renderPresets() {
+  // Panel on the brief
+  $("presets-help").textContent = presets.length
+    ? "Choosing one replaces the unit, delivery destination and other requirements in this brief. The product and quantity stay as they are."
+    : "You have no saved preferences yet. Create some on the Preferences page.";
+  $("presets-list").replaceChildren(
+    ...presets.map((preset) => {
+      const apply = h(
+        "button",
+        { type: "button", class: "preset" },
+        h("strong", { text: preset.name }),
+        h("span", { text: presetSummary(preset) }),
+      );
+      apply.addEventListener("click", () => applyPreset(preset));
+      return h("li", null, apply);
+    }),
+  );
+  // Preferences page
+  $("pref-count").textContent = `${presets.length} of ${presetLimit} saved`;
+  $("pref-new").disabled =
+    presets.length >= presetLimit || editingPreset !== null;
+  $("pref-new").title =
+    presets.length >= presetLimit
+      ? `You can save up to ${presetLimit}. Delete one to add another.`
+      : "";
+  $("pref-list").replaceChildren(
+    ...presets.map((preset) => {
+      const edit = h("button", {
+        type: "button",
+        class: "btn btn-outline-secondary btn-sm",
+        text: "Edit",
+        disabled: editingPreset !== null,
+      });
+      const remove = h("button", {
+        type: "button",
+        class: "btn btn-outline-secondary btn-sm",
+        text: "Delete",
+        "aria-label": `Delete ${preset.name}`,
+        disabled: editingPreset !== null,
+      });
+      edit.addEventListener("click", () => editPreset(preset));
+      remove.addEventListener("click", () => deletePreset(preset));
+      return h(
+        "li",
+        { class: editingPreset === preset.id ? "is-current" : "" },
+        h(
+          "div",
+          null,
+          h("p", { class: "record-title", text: preset.name }),
+          h("p", { class: "record-meta", text: presetSummary(preset) }),
+        ),
+        h("div", { class: "record-side" }, edit, remove),
+      );
+    }),
+  );
+}
+
+/* Open the editor for a saved set, or for a new one when none is given. */
+function editPreset(preset) {
+  editingPreset = preset ? preset.id : "new";
+  $("pref-editor-title").textContent = preset
+    ? `Edit “${preset.name}”`
+    : "New preferences";
+  $("pref-name").value = preset?.name || "";
+  const unit = preset?.quantity_unit || "pieces";
+  $("pref-unit").value = UNITS.includes(unit) ? unit : "custom";
+  $("pref-unit-custom").value = UNITS.includes(unit) ? "" : unit;
+  $("pref-unit-custom-field").hidden = $("pref-unit").value !== "custom";
+  setPrefArea(preset?.delivery_area || null);
+  $("pref-other").value = preset?.other_requirements || "";
+  $("pref-error").hidden = true;
+  $("pref-status").textContent = "";
+  $("preferences-form").hidden = false;
+  renderPresets();
+  $("pref-name").focus();
+}
+
+function closePresetEditor() {
+  editingPreset = null;
+  $("preferences-form").hidden = true;
+  renderPresets();
+}
+
+async function loadPreferences() {
   try {
-    preferences = await accountRequest("/api/preferences/");
+    const data = await accountRequest("/api/preferences/");
+    presets = data.preferences || [];
+    presetLimit = data.limit || presetLimit;
   } catch (e) {
     $("pref-status").textContent =
       `Your preferences could not be loaded. ${e.message}`;
-    return;
   }
-  showPreferences();
-  // Never overwrite a brief that is being restored or already filled in.
-  if (applyToBrief && !state.jobId && !$("product").value && !area)
-    applyDefaults();
+  renderPresets();
 }
 
-async function savePreferences() {
+async function savePreset() {
+  const name = $("pref-name").value.trim();
+  const fail = (message) => {
+    $("pref-error").textContent = message;
+    $("pref-error").hidden = false;
+  };
+  if (!name) {
+    fail("Give these preferences a name.");
+    return $("pref-name").focus();
+  }
   const unit =
     $("pref-unit").value === "custom"
       ? $("pref-unit-custom").value.trim()
       : $("pref-unit").value;
+  const creating = editingPreset === "new";
   $("pref-save").disabled = true;
-  $("pref-status").textContent = "Saving…";
   try {
-    preferences = await accountRequest("/api/preferences/", {
-      quantity_unit: unit || "pieces",
-      delivery_area: prefArea,
-      other_requirements: $("pref-other").value,
-    });
-    showPreferences();
-    $("pref-status").textContent =
-      "Saved. New briefs start with these defaults.";
-    if (!state.jobId && !$("product").value) applyDefaults();
+    const saved = await accountRequest(
+      creating ? "/api/preferences/" : `/api/preferences/${editingPreset}/`,
+      {
+        method: creating ? "POST" : "PUT",
+        body: {
+          name,
+          quantity_unit: unit || "pieces",
+          delivery_area: prefArea,
+          other_requirements: $("pref-other").value,
+        },
+      },
+    );
+    presets = creating
+      ? [...presets, saved]
+      : presets.map((p) => (p.id === saved.id ? saved : p));
+    closePresetEditor();
+    $("pref-status").textContent = `Saved “${saved.name}”.`;
   } catch (e) {
-    $("pref-status").textContent = e.message;
+    fail(e.message);
   } finally {
     $("pref-save").disabled = false;
   }
+}
+
+async function deletePreset(preset) {
+  if (!window.confirm(`Delete the preferences “${preset.name}”?`)) return;
+  try {
+    await accountRequest(`/api/preferences/${preset.id}/`, {
+      method: "DELETE",
+    });
+    presets = presets.filter((p) => p.id !== preset.id);
+    $("pref-status").textContent = `Deleted “${preset.name}”.`;
+  } catch (e) {
+    $("pref-status").textContent = e.message;
+  }
+  renderPresets();
 }
 
 /* ---------- Events ---------- */
@@ -2941,8 +3067,13 @@ document.addEventListener("click", (event) => {
 });
 $("preferences-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  savePreferences();
+  savePreset();
 });
+$("pref-new").addEventListener("click", () => editPreset(null));
+$("pref-cancel").addEventListener("click", closePresetEditor);
+$("presets-open").addEventListener("click", () =>
+  togglePresets($("presets-panel").hidden),
+);
 $("pref-unit").addEventListener("change", () => {
   $("pref-unit-custom-field").hidden = $("pref-unit").value !== "custom";
 });
@@ -2966,7 +3097,7 @@ const startedOnBrief = !location.hash;
 showView(false);
 render();
 const savedJob = recalledJob();
-loadPreferences(!savedJob);
+loadPreferences();
 if (savedJob) {
   restore(savedJob);
   if (startedOnBrief) go("results");

@@ -108,31 +108,64 @@ def known_suppliers(request):
     return JsonResponse({'suppliers': services.known_suppliers(user, _store())})
 
 
-def _preferences_json(preferences):
-    return {'quantity_unit': preferences.quantity_unit, 'delivery_area': preferences.delivery_area,
-            'other_requirements': preferences.other_requirements}
+def _preferences_json(saved):
+    return {'id': saved.pk, 'name': saved.name, 'quantity_unit': saved.quantity_unit,
+            'delivery_area': saved.delivery_area, 'other_requirements': saved.other_requirements}
 
 
-@require_http_methods(['GET', 'PUT'])
-def preferences(request):
-    user = account(request)
-    if not user:
-        return sign_in_required()
-    saved, _ = Preferences.objects.get_or_create(user=user)
-    if request.method == 'GET':
-        return JsonResponse(_preferences_json(saved))
+def _read_preferences(request):
+    """The submitted name, unit, destination and text, or None when invalid."""
     if len(request.body) > 100_000:
-        return JsonResponse({'error': 'Request is too large.'}, status=413)
+        return None
     try:
         data = json.loads(request.body)
-        unit, area, other = data['quantity_unit'], data['delivery_area'], data['other_requirements']
-        valid = (isinstance(unit, str) and len(unit.strip()) <= 40
+        name, unit, area, other = data['name'], data['quantity_unit'], data['delivery_area'], data['other_requirements']
+        valid = (isinstance(name, str) and 1 <= len(name.strip()) <= 60
+                 and isinstance(unit, str) and len(unit.strip()) <= 40
                  and isinstance(other, str) and len(other) <= 4000
                  and (area is None or (isinstance(area, dict) and area.get('type') in AREA_TYPES)))
     except (ValueError, KeyError, TypeError):
-        valid = False
-    if not valid:
-        return JsonResponse({'error': 'These preferences could not be saved. Check the unit, destination and text length.'}, status=400)
-    saved.quantity_unit, saved.delivery_area, saved.other_requirements = unit.strip(), area, other.strip()
+        return None
+    return {'name': name.strip(), 'quantity_unit': unit.strip(), 'delivery_area': area,
+            'other_requirements': other.strip()} if valid else None
+
+
+INVALID_PREFERENCES = 'These preferences could not be saved. Give them a name and check the unit, destination and text length.'
+
+
+@require_http_methods(['GET', 'POST'])
+def preferences(request):
+    """List this account's saved preferences, or add one."""
+    user = account(request)
+    if not user:
+        return sign_in_required()
+    if request.method == 'GET':
+        return JsonResponse({'preferences': [_preferences_json(p) for p in user.preferences.all()],
+                             'limit': Preferences.LIMIT})
+    values = _read_preferences(request)
+    if values is None:
+        return JsonResponse({'error': INVALID_PREFERENCES}, status=400)
+    if user.preferences.count() >= Preferences.LIMIT:
+        return JsonResponse({'error': f'You can save up to {Preferences.LIMIT} preferences. Delete one to add another.'}, status=400)
+    return JsonResponse(_preferences_json(Preferences.objects.create(user=user, **values)), status=201)
+
+
+@require_http_methods(['PUT', 'DELETE'])
+def preference(request, preference_id):
+    """Change or delete one of this account's saved preferences."""
+    user = account(request)
+    if not user:
+        return sign_in_required()
+    saved = user.preferences.filter(pk=preference_id).first()
+    if not saved:  # Also the answer for another account's preferences.
+        return JsonResponse({'error': 'These preferences no longer exist.'}, status=404)
+    if request.method == 'DELETE':
+        saved.delete()
+        return JsonResponse({'deleted': preference_id})
+    values = _read_preferences(request)
+    if values is None:
+        return JsonResponse({'error': INVALID_PREFERENCES}, status=400)
+    for field, value in values.items():
+        setattr(saved, field, value)
     saved.save()
     return JsonResponse(_preferences_json(saved))

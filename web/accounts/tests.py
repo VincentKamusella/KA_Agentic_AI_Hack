@@ -137,18 +137,40 @@ class OwnershipTests(TestCase):
         self.assertEqual((supplier['searches'], supplier['last_eligibility'], supplier['last_product']),
                          (2, 'ineligible', 'Steel nuts'))
 
-    def test_preferences_are_saved_per_account_and_validated(self):
+    def test_preferences_can_be_created_edited_and_deleted_per_account(self):
         self.client.force_login(self.owner)
-        body = {'quantity_unit': ' kg ', 'delivery_area': {'type': 'world'}, 'other_requirements': 'ISO 9001 required'}
-        saved = self.client.put('/api/preferences/', data=json.dumps(body), content_type='application/json')
-        self.assertEqual(saved.json(), {'quantity_unit': 'kg', 'delivery_area': {'type': 'world'},
-                                        'other_requirements': 'ISO 9001 required'})
-        for bad in [{**body, 'quantity_unit': 'x' * 41}, {**body, 'delivery_area': {'type': 'moon'}}, {'quantity_unit': 'kg'}]:
-            response = self.client.put('/api/preferences/', data=json.dumps(bad), content_type='application/json')
-            self.assertEqual(response.status_code, 400)
+        body = {'name': ' Fasteners ', 'quantity_unit': ' kg ', 'delivery_area': {'type': 'world'},
+                'other_requirements': 'ISO 9001 required'}
+        created = self.client.post('/api/preferences/', data=json.dumps(body), content_type='application/json')
+        self.assertEqual(created.status_code, 201)
+        saved = created.json()
+        self.assertEqual({k: saved[k] for k in body}, {'name': 'Fasteners', 'quantity_unit': 'kg',
+                         'delivery_area': {'type': 'world'}, 'other_requirements': 'ISO 9001 required'})
+        url = f"/api/preferences/{saved['id']}/"
+        edited = self.client.put(url, data=json.dumps({**body, 'name': 'Bolts'}), content_type='application/json')
+        self.assertEqual(edited.json()['name'], 'Bolts')
+        for bad in [{**body, 'name': ' '}, {**body, 'quantity_unit': 'x' * 41}, {**body, 'delivery_area': {'type': 'moon'}},
+                    {'name': 'x'}]:
+            self.assertEqual(self.client.put(url, data=json.dumps(bad), content_type='application/json').status_code, 400)
+            self.assertEqual(self.client.post('/api/preferences/', data=json.dumps(bad), content_type='application/json').status_code, 400)
+        # Another account neither sees nor can change or delete them.
         self.client.force_login(self.other)
-        self.assertEqual(self.client.get('/api/preferences/').json(),
-                         {'quantity_unit': '', 'delivery_area': None, 'other_requirements': ''})
+        self.assertEqual(self.client.get('/api/preferences/').json(), {'preferences': [], 'limit': 10})
+        self.assertEqual(self.client.put(url, data=json.dumps(body), content_type='application/json').status_code, 404)
+        self.assertEqual(self.client.delete(url).status_code, 404)
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.delete(url).status_code, 200)
+        self.assertEqual(self.client.get('/api/preferences/').json()['preferences'], [])
+
+    def test_at_most_ten_preferences_are_saved(self):
+        self.client.force_login(self.owner)
+        body = {'name': 'Set', 'quantity_unit': '', 'delivery_area': None, 'other_requirements': ''}
+        for _ in range(10):
+            self.assertEqual(self.client.post('/api/preferences/', data=json.dumps(body), content_type='application/json').status_code, 201)
+        over = self.client.post('/api/preferences/', data=json.dumps(body), content_type='application/json')
+        self.assertEqual(over.status_code, 400)
+        self.assertIn('up to 10', over.json()['error'])
+        self.assertEqual(len(self.client.get('/api/preferences/').json()['preferences']), 10)
 
 
 class TestAccountCommandTests(TestCase):
