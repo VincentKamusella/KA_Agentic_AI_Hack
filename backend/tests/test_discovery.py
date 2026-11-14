@@ -147,8 +147,17 @@ class CitationVolumeTests(unittest.TestCase):
 
 
 class ParallelSearchTests(StoreCase):
-    def test_all_searches_run_concurrently_by_default_and_limit_is_configurable(self):
-        for limit, expected in [(None, 4), (2, 2)]:
+    def test_transport_errors_retry_once_and_tls_errors_do_not(self):
+        from unittest.mock import AsyncMock
+        for kind, expected in [('timeout', 2), ('connection', 2), ('tls', 1)]:
+            client = AsyncMock()
+            client.post.side_effect = GeminiError('Transport failed', error_kind=kind)
+            with self.subTest(kind=kind), patch('backend.discovery.service.asyncio.sleep', new_callable=AsyncMock), self.assertRaises(GeminiError):
+                asyncio.run(GeminiDiscovery(client, store=self.store).search_with_retry({}))
+            self.assertEqual(client.post.await_count, expected)
+
+    def test_search_concurrency_is_bounded_by_default_and_configurable(self):
+        for limit, expected in [(None, 3), (2, 2), (4, 4)]:
             class Client:
                 active = maximum = count = 0
                 async def post(self, *args):

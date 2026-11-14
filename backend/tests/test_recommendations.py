@@ -90,6 +90,20 @@ class RecommendationTests(TestCase):
                 self.client.post.return_value = response
                 self.run_agent()
 
+    def test_provider_schema_is_small_but_local_output_limits_still_apply(self):
+        self.run_agent()
+        schema = self.client.post.call_args.args[1]['response_format']['schema']
+        wire = json.dumps(schema)
+        for bound in ('maxLength', 'minLength', 'pattern', 'maxItems', 'minItems'):
+            self.assertNotIn(bound, wire)
+        self.assertIn('required', schema)
+        oversized = draft()
+        oversized['email_intro'] = 'x' * 2001
+        for items in ([oversized], [draft()] * 4):
+            self.client.post.return_value = provider_response(items)
+            with self.assertRaises(GeminiError):
+                self.run_agent()
+
     def test_no_candidates_skips_provider_and_explains_no_recommendation(self):
         self.result.assessments = [a for a in self.result.assessments if a.eligibility == 'ineligible']
         report = self.run_agent()

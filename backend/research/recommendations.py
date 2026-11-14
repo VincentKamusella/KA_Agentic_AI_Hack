@@ -49,6 +49,24 @@ class DraftReport(Contract):
     recommendations: list[RecommendationDraft] = Field(max_length=3)
 
 
+def generation_schema():
+    """Keep Gemini's grammar small; enforce content bounds locally after generation.
+
+    Nested bounded strings/arrays expand the provider's grammar enough to reject
+    the request with HTTP 400. Types, required keys and object shape stay intact.
+    """
+    bounds = {'minLength', 'maxLength', 'pattern', 'minItems', 'maxItems'}
+
+    def simplify(value):
+        if isinstance(value, dict):
+            return {key: simplify(item) for key, item in value.items() if key not in bounds}
+        if isinstance(value, list):
+            return [simplify(item) for item in value]
+        return value
+
+    return simplify(DraftReport.model_json_schema())
+
+
 def email_draft(requirements: Requirements, draft: RecommendationDraft) -> EmailDraft:
     """Keep critical purchase details and unresolved checks in every generated draft."""
     lines = [
@@ -116,7 +134,7 @@ class GeminiRecommendationAgent:
             'system_instruction': INSTRUCTIONS,
             'input': json.dumps(data),
             'response_format': {'type': 'text', 'mime_type': 'application/json',
-                                'schema': DraftReport.model_json_schema()},
+                                'schema': generation_schema()},
         }
         for attempt in range(2):
             try:
