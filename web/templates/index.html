@@ -1,0 +1,75 @@
+{% load static %}
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuotePilot · Supplier discovery</title>
+<link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+<link rel="stylesheet" href="{% static 'web/app.css' %}">
+<script defer src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+<script defer src="{% static 'web/app.js' %}"></script>
+</head>
+<body>
+<div class="app-shell">
+<aside class="sidebar">
+<a class="brand" href="/" aria-label="QuotePilot home"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 5h18v14H13l-6 5v-5H5z"/><path d="m10 11 3 3 6-6"/></svg>QuotePilot</a>
+<nav aria-label="Workspace navigation" class="nav flex-column">
+<a class="nav-link active" href="#/discovery" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Supplier discovery</a>
+<a class="nav-link" href="#/shortlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v17l-7-4-7 4z"/></svg>Shortlist</a>
+<a class="nav-link" href="#/evidence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></svg>Source evidence</a>
+<a class="nav-link" href="#/method"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6"/></svg>Evaluation method</a>
+</nav>
+<div class="sidebar-note"><span class="status-dot"></span>Human-led decisions<p>Research, compare, verify.<br>You make the final call.</p></div>
+</aside>
+<main>
+<div class="title-row"><div><h1 id="page-title" tabindex="-1">Industrial supplier discovery</h1><p id="page-description">Find suppliers, assess their capabilities, and build an evidence-backed shortlist.</p></div><button type="button" id="reset" class="btn btn-outline-secondary btn-sm">New search</button></div>
+
+<div id="notice" class="visually-hidden" role="status" aria-live="polite"></div><div id="error" class="alert alert-danger" role="alert" hidden></div>
+
+<section id="view-discovery" data-view="discovery" aria-labelledby="page-title">
+<form id="requirements" class="search-panel">
+<div class="section-heading"><h2>Describe the supplier you need.</h2><span class="subtle">Discovery brief</span></div>
+<div class="search-input-row"><div class="search-field"><label for="product" class="visually-hidden">What are you sourcing?</label><textarea class="form-control" id="product" required maxlength="1000" rows="2" placeholder="For example: manufacturers of precision steel bolts for industrial equipment"></textarea></div><button id="discover" type="submit" class="btn btn-primary">Discover suppliers <span aria-hidden="true">→</span></button></div>
+<div class="brief-options"><div><label class="form-label" for="quantity">Quantity</label><input class="form-control" id="quantity" type="number" min="1" step="1" placeholder="Quantity" required></div><div><label class="form-label" for="country">Delivery country</label><input class="form-control" id="country" maxlength="100" placeholder="Country" required></div></div>
+<p id="mode-note" class="help">Searches public sources with Gemini. Verify cited summaries on the original pages.</p>
+</form>
+<ol class="stages" aria-label="Workflow"><li id="stage-discover" aria-current="step"><span>1</span>Discovery</li><li id="stage-eval"><span>2</span>Evaluation</li><li id="stage-shortlist"><span>3</span>Shortlist</li></ol>
+<div class="workspace">
+<aside class="criteria-panel"><div class="section-heading"><h2>Decision criteria</h2><button id="add" type="button" class="btn btn-link btn-sm p-0">Add</button></div>
+<p class="help">Mandatory requirements are gates. Preferences rank suppliers that pass.</p><div id="criteria"></div>
+<p class="help">Quantity and destination guide discovery. Add explicit criteria to assess them.</p>
+<p class="footnote">No orders placed.<br>No supplier messages sent.</p></aside>
+<section class="results" aria-labelledby="results-title">
+<div class="section-heading results-heading"><h2 id="results-title">Supplier workspace</h2><span id="source-label" class="badge bg-secondary-subtle text-secondary-emphasis">Gemini</span></div>
+<div id="workspace-state" class="workspace-state" role="status" aria-live="polite">
+<div id="loading" hidden><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span><span id="loading-message">Request in progress</span> <span id="loading-time" aria-hidden="true"></span></div>
+<h3 id="state-title">Start with your purchase brief</h3><p id="state-description">Describe the product, quantity, and destination. Add the requirements suppliers must meet, then run discovery.</p>
+<button type="button" id="retry" class="btn btn-outline-secondary btn-sm" hidden>Retry discovery</button>
+<a id="view-shortlist-action" class="btn btn-primary btn-sm" href="#/shortlist" hidden>View shortlist</a>
+</div>
+<div class="research-totals" aria-label="Research summary"><div><span>Discovered suppliers</span><strong id="total-suppliers">0</strong></div><div><span>Source excerpts</span><strong id="total-evidence">0</strong></div><div><span>Shortlisted</span><strong id="total-shortlist">0</strong></div></div>
+<div id="content" hidden><div class="result-actions"><p id="count"></p><button id="evaluate" type="button" class="btn btn-primary">Evaluate suppliers <span aria-hidden="true">→</span></button></div><div id="candidates"></div></div>
+</section></div></section>
+<section id="view-shortlist" data-view="shortlist" aria-labelledby="page-title" hidden>
+<div class="view-toolbar"><span class="subtle">Mandatory gates first. Preference ranking second.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Edit criteria</a></div>
+<div id="shortlist-empty" class="view-empty"><h2>No evaluation yet.</h2><p>Discover suppliers and evaluate their evidence to build your shortlist.</p><a class="btn btn-primary" href="#/discovery">Go to discovery</a></div>
+<div id="recommendation" class="alert alert-success" hidden></div><div id="comparison"></div>
+<div id="shortlist-evidence-link" hidden><a class="btn btn-outline-secondary btn-sm" href="#/evidence">Inspect supporting evidence →</a></div>
+</section>
+<section id="view-evidence" data-view="evidence" aria-labelledby="page-title" hidden>
+<div class="view-toolbar"><span class="subtle">Source excerpts, criterion assessments, and clarification drafts.</span><a class="btn btn-outline-secondary btn-sm" href="#/discovery">Back to discovery</a></div>
+<div id="evidence-empty" class="view-empty"><h2>No source evidence yet.</h2><p>Run discovery to collect supplier sources. Evaluation adds criterion-level assessments.</p><a class="btn btn-primary" href="#/discovery">Find suppliers</a></div>
+<div id="sources"></div>
+</section>
+<section id="view-method" data-view="method" aria-labelledby="page-title" hidden>
+<div class="method-content">
+<h2>1. Discover cited supplier evidence</h2><p>Gemini searches for potential suppliers. Only text with source citations is retained. These excerpts are AI-generated summaries, not independently verified quotations. Confirm supplier identity and terms on the original pages.</p>
+<h2>2. Assess every criterion</h2><p>Each source excerpt is assessed as pass, fail, or unknown. Live decisions below the provisional 85% confidence threshold abstain. Conflicting evidence also becomes unknown. The threshold has not been calibrated on customer examples.</p>
+<h2>3. Apply mandatory gates</h2><p>A mandatory failure makes a supplier ineligible. An unknown mandatory criterion requires verification. Preference scores cannot override either outcome. With no mandatory criteria, the shortlist reflects preferences only.</p>
+<h2>4. Rank eligible suppliers</h2><p>Supported preferences earn 100 points; failed or unknown preferences earn zero. Each criterion uses your chosen weight, and all preference weights stay in the denominator. Ties are broken by evidence coverage, then supplier ID. Up to three eligible suppliers are shortlisted.</p>
+<h2>5. Verify before purchasing</h2><p>Quantity and destination guide discovery unless you include them as explicit criteria. This is a research shortlist, not a quotation or purchasing approval. QuotePilot does not place orders or send supplier messages.</p>
+<a class="btn btn-outline-secondary" href="#/discovery">Back to discovery</a>
+</div>
+</section>
+</main></div>
+</body></html>

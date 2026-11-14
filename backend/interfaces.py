@@ -51,7 +51,7 @@ class SupplierRecommender(Protocol):
 
         Break ties by descending evidence coverage, then ascending supplier ID.
         Include all assessments and partial-failure issues in the response.
-        The proposed Django endpoint validates RecommendRequest and serializes
-        RecommendResponse with model_dump(mode="json"); it is not implemented yet.
+        The Django product layer exposes discovery and evaluation separately,
+        serializing stage results with model_dump(mode="json").
         """
         ...

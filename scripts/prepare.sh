@@ -14,4 +14,5 @@ uv sync --locked --python 3.12 --no-dev
 .venv/bin/python -m web.manage collectstatic --noinput
 # Run smoke tests before touching the deployment database.
 .venv/bin/python -m web.manage test web
+.venv/bin/python -m unittest backend.tests backend.test_evaluation
 .venv/bin/python -m web.manage migrate --noinput
