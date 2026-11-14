@@ -67,8 +67,11 @@ provider's TLS parameters (for example `sslmode=verify-full` and its CA configur
 Do not copy local `.env` credentials to Codesphere or commit secrets.
 
 3. Push these files to the connected GitHub branch and pull them in the workspace.
-4. Open the CI pipeline and run **Prepare → Test → Run**. `ci.yml` uses the
-   single-workspace format in Codesphere's official Python template.
+4. Open the Landscape Config Editor and select an available resource plan for
+   the `django` service. `ci.yml` uses Landscape schema `v0.4`; the optional
+   installation-specific plan ID is intentionally not hard-coded. Apply/sync
+   the configuration, then run **Prepare → Test → Run**. Editing and deploying
+   require write access; the Viewer role cannot perform these actions.
 5. Open the deployment and confirm `/` returns `{"status":"ok"}` and `/admin/`
    has styling. Run `.venv/bin/python -m web.manage check --deploy` in the workspace
    and review the HTTPS/HSTS settings for the actual ingress before production use.
@@ -80,7 +83,10 @@ Do not copy local `.env` credentials to Codesphere or commit secrets.
   static assets; runs smoke tests; applies migrations to the configured database.
 - **Test:** checks configuration, missing/unapplied migrations, and HTTP behavior.
 - **Run:** starts Gunicorn on `0.0.0.0:3000`. WhiteNoise serves collected static
-  assets, including Django admin CSS. Logs go to stdout/stderr.
+  assets, including Django admin CSS. The `django` service has one replica and
+  routes `/` through the workspace router to port 3000, preserving request paths.
+  The workspace is mounted at `/home/user/app` so the service can access the
+  prepared `.venv`, `.codesphere/python`, and static assets. Logs go to stdout/stderr.
 
 Python downloads and uv caches live under ignored `.codesphere/` on the workspace
 disk. A network connection is needed on first install. Run Prepare before Run
@@ -96,6 +102,6 @@ run Prepare, wait for success, run Test, wait for success, and restart Run.
 Codesphere's CLI/API can orchestrate these stages; keep its token in the automation
 secret store. Stop deployment on failures. Verify the trigger with a small commit.
 
-References: [official Python pipeline template](https://github.com/codesphere-community/flask/blob/main/ci.yml),
+References: [official Landscape pipeline reference](https://github.com/codesphere-cloud/cs-go/blob/main/cli/cmd/install/skills/codesphere/references/ci-pipeline.md),
 [CI pipelines](https://codesphere.ghost.io/ci-pipelines/),
 [automation API](https://docs.codesphere.com/apis-and-automations/public-api).

@@ -1,4 +1,4 @@
-# Single-workspace format used by Codesphere's official Python template.
+schemaVersion: v0.4
 prepare:
   steps:
     - name: Prepare Django application
@@ -8,6 +8,20 @@ test:
     - name: Check application
       command: bash scripts/check.sh
 run:
-  steps:
-    - name: Run Django with Gunicorn
-      command: bash scripts/start.sh
+  django:
+    replicas: 1
+    network:
+      ports:
+        - port: 3000
+          isPublic: false
+      paths:
+        - path: /
+          port: 3000
+          stripPath: false
+    volumeMounts:
+      - name: _workspace
+        mountPath: /home/user/app
+        workspacePath: ""
+    steps:
+      - name: Run Django with Gunicorn
+        command: bash scripts/start.sh
