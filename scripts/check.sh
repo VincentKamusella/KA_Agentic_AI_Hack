@@ -8,3 +8,4 @@ uv run --locked --no-dev python -m web.manage check
 uv run --locked --no-dev python -m web.manage makemigrations --check --dry-run
 uv run --locked --no-dev python -m web.manage migrate --check
 uv run --locked --no-dev python -m web.manage test backend web --noinput
+uv run --locked --no-dev python -m unittest discover -s tests -p 'test_*.py'

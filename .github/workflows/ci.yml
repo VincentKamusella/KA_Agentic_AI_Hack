@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
@@ -79,3 +79,33 @@ jobs:
         run: |
           npm run build
           git diff --exit-code -- web/static/vendor/bootstrap
+
+  deploy:
+    name: Deploy to Codesphere
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CODESPHERE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: codesphere
+    concurrency:
+      group: codesphere-production
+      cancel-in-progress: false
+    env:
+      CODESPHERE_API_TOKEN: ${{ secrets.CODESPHERE_API_TOKEN }}
+      CODESPHERE_WORKSPACE_ID: ${{ vars.CODESPHERE_WORKSPACE_ID }}
+      CODESPHERE_API_URL: ${{ vars.CODESPHERE_API_URL }}
+      DEPLOY_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install verified Codesphere CLI
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/codesphere-cloud/cs-go/releases/download/v1.66.0/cs_1.66.0_linux_amd64 \
+            --output "$RUNNER_TEMP/cs"
+          echo "e13236c4f7abaca7f11621ed20bf35912d61807b64e137277edb55d6c0cb7611  $RUNNER_TEMP/cs" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/cs"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Deploy tested commit and verify services
+        run: python3 scripts/deploy_codesphere.py
