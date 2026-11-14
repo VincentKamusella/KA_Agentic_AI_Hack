@@ -12,6 +12,17 @@ QuotePilot helps procurement teams go from *"what we need to buy"* to *"who can 
 - **Deterministic shortlist & full transparency:** Must-have failures disqualify a supplier; open must-haves require human confirmation; eligible suppliers are ranked by nice-to-have score and coverage. Every cell in the comparison matrix links straight to the exact source passage, decision-model confidence, and a ready-to-copy clarification email draft.
 - **Fast re-evaluation:** Adjust requirements, toggle must-have/nice-to-have, or request AI-suggested requirements and click **Update shortlist** to re-score saved evidence without re-running discovery.
 
+```mermaid
+flowchart LR
+    Brief["Purchase Brief<br/>(Product, Qty, Map Destination)"] --> Interpret["Brief Interpreter<br/>Must-haves & Nice-to-haves"]
+    Interpret --> Discover["Supplier Discovery & Crawler<br/>Search, Pages, PDFs, Prices"]
+    Discover --> Saved[("PostgreSQL Job &<br/>Saved Evidence")]
+    Saved --> Eval["Gemini Decision 1<br/>Pass / Fail / Unknown (<85% abstains)"]
+    Eval --> Rules["Deterministic Rules<br/>Must-have Gates & Ranking"]
+    Rules --> UI["Shortlist, Matrix, Sources<br/>& Clarification Drafts"]
+    UI -. "Adjust / Suggest Requirements<br/>(Update shortlist)" .-> Eval
+```
+
 ## How to use it
 
 1. **Describe your purchase** on the **New supplier search** screen (product, quantity/unit, delivery destination via the map modal, and any optional deadline or requirements).
