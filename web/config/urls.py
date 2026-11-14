@@ -29,5 +29,6 @@ urlpatterns = [
     path("api/history/", account_views.history, name="history"),
     path("api/suppliers/", account_views.known_suppliers, name="known-suppliers"),
     path("api/preferences/", account_views.preferences, name="preferences"),
+    path("api/preferences/<int:preference_id>/", account_views.preference, name="preference"),
     path("admin/", admin.site.urls),
 ]

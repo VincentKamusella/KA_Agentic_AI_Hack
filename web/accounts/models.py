@@ -22,11 +22,19 @@ class SearchRecord(models.Model):
 
 
 class Preferences(models.Model):
-    """Defaults that prefill a new brief. Empty values mean "no default"."""
+    """One named set of brief defaults. An account can keep several and pick
+    one when writing a brief; nothing is applied automatically."""
 
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='preferences')
+    LIMIT = 10
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='preferences')
+    name = models.CharField(max_length=60, default='Default')
     quantity_unit = models.CharField(max_length=40, blank=True)
     # The map selection as the browser stores it (radius, countries, …).
     delivery_area = models.JSONField(null=True, blank=True)
     other_requirements = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']

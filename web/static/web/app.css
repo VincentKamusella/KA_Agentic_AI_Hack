@@ -1511,6 +1511,81 @@ button.record-title:hover {
   align-items: center;
   gap: 12px;
 }
+.head-actions {
+  display: grid;
+  flex: none;
+  gap: 8px;
+}
+.page-head .head-actions .btn {
+  margin-top: 0;
+}
+.page-head .head-actions {
+  margin-top: 4px;
+}
+.presets-panel {
+  max-width: 860px;
+  margin-bottom: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 12px;
+  background: var(--qp-surface);
+}
+.presets-panel h2 {
+  font-size: 1rem;
+}
+.presets-panel .help {
+  margin-top: 6px;
+}
+.presets-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.presets-list:empty {
+  display: none;
+}
+.preset {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--qp-line);
+  border-radius: 10px;
+  background: none;
+  color: var(--qp-light);
+  text-align: left;
+  transition:
+    border-color 120ms ease-out,
+    background-color 120ms ease-out;
+}
+.preset:hover {
+  border-color: var(--qp-accent-line);
+  background: var(--qp-accent-soft);
+}
+.preset strong {
+  font-weight: 600;
+}
+.preset span {
+  color: var(--qp-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.record-list li.is-current {
+  background: var(--qp-accent-soft);
+}
+.pref-editor {
+  margin-top: 28px;
+}
 .pref-area {
   display: flex;
   gap: 8px;
@@ -1827,6 +1902,11 @@ button.record-title:hover {
     flex-direction: column-reverse;
   }
   .page-head .btn {
+    align-self: flex-end;
+    margin-top: 0;
+  }
+  .page-head .head-actions {
+    display: flex;
     align-self: flex-end;
     margin-top: 0;
   }
